@@ -68,11 +68,14 @@ Ctrl+Z retire d'abord le dernier point du tracé en cours, sinon annule la derni
 
 ## D08 — Rendu et mémoire (validé)
 
-Fichier limité à 100 Mo. Les pages sont rendues à la demande ; un cache LRU garde au plus
-3 rendus de pages. Pendant le zoom, l'image existante est mise à l'échelle par transformation ;
-le rendu net est relancé après 200 ms sans zoom et ne couvre que la zone visible (plus une
-marge), pour rester sous les limites de taille de canvas sur un A0. Les tracés sont sur un
-canvas de superposition redessiné par `requestAnimationFrame`.
+Fichier limité à 100 Mo, image limitée à 120 mégapixels. Les pages sont chargées à la
+demande ; un cache LRU garde au plus 3 pages pdf.js (`page.cleanup()` à l'éviction) et un
+seul rendu bitmap. Pendant le zoom ou le déplacement, l'image existante est transformée en
+CSS ; le rendu net est relancé après 200 ms d'inactivité et ne couvre que la zone visible,
+ce qui reste sous les limites de taille de canvas sur un A0 à fort zoom. Les tracés sont sur
+un canvas de superposition redessiné par `requestAnimationFrame`, sans rendu React au
+mouvement de la souris. Un PDF invalide, protégé, vide ou d'un format inconnu produit un
+message en français, sans plantage.
 
 ## D09 — Palette de couleurs (validé)
 
@@ -108,5 +111,31 @@ Champ `version` ajouté au `Project` pour les migrations de format.
 
 ## D14 — Clavier sur le plan (validé)
 
-Réticule clavier : flèches pour déplacer (Maj = pas ×10), Espace pour poser un point
+Réticule clavier : flèches pour déplacer (10 px, Maj = 50 px), Espace pour poser un point
 (sans glisser), Entrée pour terminer. Espace maintenu + glisser = déplacement du plan.
+Raccourcis d'outils : V sélection, T tracer, E étalonner, K vérifier une cote.
+
+## D15 — Ouverture dans un voile non coffré
+
+Le cahier des charges dit « 1 face si la cible est f1, sinon 2 ». Pour une cible `f0`
+(non coffrée), déduire deux faces rendrait le coffrage net négatif sans raison : on déduit
+0 face. Les tableaux (`t1`) restent comptés.
+
+## D16 — Ouvrir un plan dans un projet qui a des tracés
+
+Choix en ligne : « Nouveau projet avec ce plan » (les tracés sont effacés) ou « Garder les
+tracés (plan révisé) » (mêmes numéros de page). Rien n'est effacé sans ce choix.
+
+## D17 — Affichage et ergonomie
+
+- Tous les tracés de la page sont affichés, quel que soit le niveau (le filtre par niveau
+  arrive en phase 4). Les poteaux sont dessinés à leur taille réelle a × b si l'échelle est
+  connue, avec une taille minimale à l'écran.
+- Glisser sur le plan avec l'outil Sélection déplace la vue.
+- Bouton « Ouvrir le plan d'exemple » quand aucun plan n'est ouvert (`demo/plan-demo.pdf`
+  est intégré au build).
+- Légende du PDF annoté en haut à gauche de chaque page annotée, orientée selon la rotation
+  de la page.
+- Les messages d'information disparaissent après 6 s ; les erreurs restent jusqu'à leur
+  fermeture.
+- L'historique d'annulation repart de zéro à la réouverture de l'onglet (D07).

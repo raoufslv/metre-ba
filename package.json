@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Métré béton armé sur plans PDF, 100 % dans le navigateur",
   "type": "module",
-  "license": "MIT",
+  "license": "UNLICENSED",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
