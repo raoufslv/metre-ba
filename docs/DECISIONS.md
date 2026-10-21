@@ -139,3 +139,17 @@ tracés (plan révisé) » (mêmes numéros de page). Rien n'est effacé sans ce
 - Les messages d'information disparaissent après 6 s ; les erreurs restent jusqu'à leur
   fermeture.
 - L'historique d'annulation repart de zéro à la réouverture de l'onglet (D07).
+
+## Phase 2
+
+- D18 : hauteur de niveau par défaut 2,70 m ; seuls voiles et poteaux peuvent la suivre (case à cocher),
+  les projets v1 gardent leurs hauteurs fixes (migration v1→v2 sans changement de résultat).
+- D19 : la fenêtre ajoute le coffrage de l'allège (W·e) ; l'appui est un tracé séparé facultatif.
+- D20 : les pertes ne touchent que les colonnes « à commander » (affichées seulement si une perte ≠ 0).
+- D21 : recouvrements désactivés par défaut ; déduction unilatérale pour ne jamais compter deux fois ;
+  détection géométrique simplifiée (voir FORMULAS.md), liste des jonctions visible à l'écran.
+- D22 : supprimer un élément supprime ses tracés (confirmation) ; les cibles pendantes sont effacées
+  et signalées par un avertissement de calcul plutôt que de supprimer les ouvertures.
+- D23 : appliquer un catalogue conserve les éléments utilisés par des tracés mais absents du gabarit.
+- D24 : bibliothèque par défaut dans localStorage (`metre-ba:library`) ; nouveaux projets l'utilisent.
+- D25 : l'ouverture se trace par glisser, la largeur saisie fait foi (le second point est recalé).

@@ -1,13 +1,16 @@
 import { create } from "zustand";
 import { isCalibrated, rescaleMeasurements } from "../lib/calibration";
 import { newProject } from "../lib/catalog";
+import { deleteElement, duplicateElement } from "../lib/elements";
 import { dedupeConsecutive } from "../lib/geometry";
+import { applyCatalog } from "../lib/templates";
+import type { Settings } from "../lib/types";
 import { createHistory, record, redo, undo, type History } from "../lib/history";
-import { DEFAULT_PREFS, type Prefs } from "../lib/store";
+import { DEFAULT_PREFS, loadLibrary, type Prefs } from "../lib/store";
 import type { Element, Measurement, Mode, Project, Pt } from "../lib/types";
 import type { PlanDoc } from "../pdf/planDoc";
 
-export type Tool = "select" | "draw" | "calibrate" | "verify";
+export type Tool = "select" | "draw" | "opening" | "calibrate" | "verify";
 
 export interface View {
   zoom: number;
@@ -37,6 +40,8 @@ export interface AppState {
   tool: Tool;
   activeElementId: string;
   draft: Pt[];
+  /** Rectangle d'ouverture tracé (glisser) en attente de ses paramètres. */
+  openingDraft: [Pt, Pt] | null;
   selectedId: string | null;
   hoverId: string | null;
   /** Points cliqués pour l'étalonnage ou la vérification (0 à 2). */
@@ -61,7 +66,13 @@ export function newId(): string {
     : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-const initialProject = newProject();
+/** Nouveau projet basé sur la bibliothèque personnalisée si elle existe. */
+export function freshProject(name?: string): Project {
+  const lib = loadLibrary(globalThis.localStorage);
+  return newProject(name, lib ?? undefined);
+}
+
+const initialProject = freshProject();
 
 export const useApp = create<AppState>(() => ({
   project: initialProject,
@@ -73,6 +84,7 @@ export const useApp = create<AppState>(() => ({
   tool: "select",
   activeElementId: initialProject.elements[0]!.id,
   draft: [],
+  openingDraft: null,
   selectedId: null,
   hoverId: null,
   probe: [],
@@ -143,6 +155,7 @@ export function loadProjectState(project: Project): void {
     history: createHistory<Project>(),
     activeElementId: active,
     draft: [],
+    openingDraft: null,
     probe: [],
     selectedId: null,
     hoverId: null,
@@ -153,7 +166,13 @@ export function loadProjectState(project: Project): void {
 // ---------- Outils ----------
 
 export function setTool(tool: Tool): void {
-  set({ tool, draft: [], probe: [], ...(tool !== "select" ? { selectedId: null } : {}) });
+  set({
+    tool,
+    draft: [],
+    probe: [],
+    openingDraft: null,
+    ...(tool !== "select" ? { selectedId: null } : {}),
+  });
 }
 
 export function selectElement(id: string): void {
@@ -162,7 +181,8 @@ export function selectElement(id: string): void {
 
 export function cancelCurrent(): void {
   const s = get();
-  if (s.draft.length || s.probe.length) set({ draft: [], probe: [] });
+  if (s.openingDraft) set({ openingDraft: null });
+  else if (s.draft.length || s.probe.length) set({ draft: [], probe: [] });
   else if (s.selectedId) set({ selectedId: null });
   else if (s.tool !== "select") set({ tool: "select" });
 }
@@ -272,6 +292,56 @@ export function updateElement(id: string, patch: Partial<Element>): void {
     (p) => ({ ...p, elements: p.elements.map((e) => (e.id === id ? { ...e, ...patch } : e)) }),
     `element:${id}:${Object.keys(patch).join(",")}`,
   );
+}
+
+/** Duplique un élément (copie juste après l'original) et l'active. */
+export function duplicateActiveElement(id: string): void {
+  const r = duplicateElement(get().project, id, newId());
+  if (!r) return;
+  commit(() => r.project);
+  set({ activeElementId: r.id });
+  notify("success", "Élément dupliqué : renommez-le et ajustez ses valeurs.");
+}
+
+export function removeElement(id: string): void {
+  const r = deleteElement(get().project, id);
+  commit(() => r.project);
+  const s = get();
+  if (s.activeElementId === id)
+    set({ activeElementId: r.project.elements[0]?.id ?? "", draft: [] });
+  notify("success", `Élément supprimé (${r.removed} tracé(s) retiré(s)).`);
+}
+
+/** Hauteur sous plafond d'un niveau ; `null` revient à la valeur par défaut. */
+export function setLevelHeight(level: string, h: number | null): void {
+  commit((p) => {
+    const levelHeights = { ...p.levelHeights };
+    if (h === null) delete levelHeights[level];
+    else levelHeights[level] = h;
+    return { ...p, levelHeights };
+  }, `levelHeight:${level}`);
+}
+
+export function setSettings(patch: Partial<Settings>): void {
+  commit((p) => ({ ...p, settings: { ...p.settings, ...patch } }), "settings");
+}
+
+/** Remplace le catalogue par un gabarit (éléments utilisés conservés). */
+export function applyTemplate(elements: Element[]): void {
+  const r = applyCatalog(get().project, elements);
+  commit(() => r.project);
+  set({ activeElementId: r.project.elements[0]?.id ?? "" });
+  notify(
+    "success",
+    r.kept.length
+      ? `Catalogue appliqué. Conservés car utilisés : ${r.kept.join(", ")}.`
+      : "Catalogue appliqué.",
+  );
+}
+
+/** Ajoute les tracés d'une ouverture déjà construite. */
+export function addMeasurements(ms: Measurement[]): void {
+  commit((p) => ({ ...p, measurements: [...p.measurements, ...ms] }));
 }
 
 export function setLevel(level: string): void {

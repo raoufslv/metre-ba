@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { COFFRAGE_LABELS, dimFields, hasOwnRatios, MODE_LABELS } from "../lib/catalog";
 import { formatNumber, formatQty } from "../lib/format";
-import { COFFRAGES_BY_MODE, computeMeasurement, targetModeFor } from "../lib/quantities";
-import type { Coffrage, Element, Measurement, Mode } from "../lib/types";
+import {
+  COFFRAGES_BY_MODE,
+  computeMeasurement,
+  resolveDims,
+  targetModeFor,
+} from "../lib/quantities";
+import type { Coffrage, Element, Measurement, Mode, Overrides } from "../lib/types";
 import {
   deleteMeasurement,
+  duplicateActiveElement,
+  removeElement,
   selectElement,
   updateElement,
   updateMeasurement,
@@ -72,8 +79,51 @@ function ElementEditor({ el, elements }: { el: Element; elements: Element[] }) {
   const targetMode = targetModeFor(el.mode);
   const targets = targetMode ? elements.filter((e) => e.mode === targetMode) : [];
   const p = `el-${el.id}`;
+  const measurements = useApp((s) => s.project.measurements);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const own = measurements.filter((m) => m.elementId === el.id).length;
+  const canStory = el.mode === "ligne" || el.mode === "point";
   return (
     <div className="element-editor">
+      <div className="field">
+        <label htmlFor={`${p}-name`}>Nom</label>
+        <input
+          id={`${p}-name`}
+          value={el.name}
+          maxLength={80}
+          onChange={(e) => updateElement(el.id, { name: e.target.value })}
+          onBlur={(e) => {
+            if (!e.target.value.trim()) updateElement(el.id, { name: "Élément sans nom" });
+          }}
+        />
+      </div>
+      <div className="row">
+        <button type="button" onClick={() => duplicateActiveElement(el.id)}>
+          Dupliquer
+        </button>
+        {confirmDelete ? (
+          <span className="inline-confirm" role="alert">
+            Supprimer aussi {own} tracé(s) ?
+            <button
+              type="button"
+              className="danger"
+              onClick={() => {
+                setConfirmDelete(false);
+                removeElement(el.id);
+              }}
+            >
+              Confirmer
+            </button>
+            <button type="button" onClick={() => setConfirmDelete(false)}>
+              Annuler
+            </button>
+          </span>
+        ) : (
+          <button type="button" className="danger" onClick={() => setConfirmDelete(true)}>
+            Supprimer
+          </button>
+        )}
+      </div>
       <div className="field">
         <label htmlFor={`${p}-color`}>Couleur</label>
         <input
@@ -83,15 +133,27 @@ function ElementEditor({ el, elements }: { el: Element; elements: Element[] }) {
           onChange={(e) => updateElement(el.id, { color: e.target.value })}
         />
       </div>
-      {dimFields(el.mode).map(({ field, label }) => (
-        <NumberField
-          key={field}
-          id={`${p}-${field}`}
-          label={label}
-          value={el[field]}
-          onCommit={(v) => updateElement(el.id, { [field]: v })}
-        />
-      ))}
+      {canStory && (
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={el.storyHeight ?? false}
+            onChange={(e) => updateElement(el.id, { storyHeight: e.target.checked })}
+          />
+          Hauteur = hauteur sous plafond du niveau
+        </label>
+      )}
+      {dimFields(el.mode)
+        .filter(({ field }) => !(field === "h" && canStory && el.storyHeight))
+        .map(({ field, label }) => (
+          <NumberField
+            key={field}
+            id={`${p}-${field}`}
+            label={label}
+            value={el[field]}
+            onCommit={(v) => updateElement(el.id, { [field]: v })}
+          />
+        ))}
       <div className="field">
         <label htmlFor={`${p}-cof`}>Coffrage</label>
         <select
@@ -139,6 +201,25 @@ function ElementEditor({ el, elements }: { el: Element; elements: Element[] }) {
           <small className="muted">Épaisseur et ratios d'acier sont ceux de l'élément ciblé.</small>
         </div>
       )}
+      {hasOwnRatios(el.mode) && (
+        <>
+          <NumberField
+            id={`${p}-lc`}
+            label="Perte / majoration béton (%)"
+            value={el.lossConcrete ?? 0}
+            onCommit={(v) => updateElement(el.id, { lossConcrete: v })}
+          />
+          <NumberField
+            id={`${p}-ls`}
+            label="Perte / majoration acier (%)"
+            value={el.lossSteel ?? 0}
+            onCommit={(v) => updateElement(el.id, { lossSteel: v })}
+          />
+          <small className="muted">
+            Appliquée à la quantité à commander uniquement ; la quantité mesurée reste inchangée.
+          </small>
+        </>
+      )}
       <small className="muted">Valeurs indicatives, à valider par un ingénieur.</small>
     </div>
   );
@@ -181,8 +262,55 @@ function ElementsTab() {
   );
 }
 
+/** Surcharge d'une dimension ou d'un ratio pour ce seul tracé. */
+function OverrideField({
+  m,
+  field,
+  label,
+  base,
+}: {
+  m: Measurement;
+  field: keyof Overrides;
+  label: string;
+  base: number;
+}) {
+  const value = m.overrides?.[field];
+  const id = `m-${m.id}-ov-${field}`;
+  const set = (v: number | undefined) => {
+    const next: Overrides = { ...m.overrides };
+    if (v === undefined) delete next[field];
+    else next[field] = v;
+    updateMeasurement(
+      m.id,
+      { overrides: Object.keys(next).length ? next : undefined },
+      `m:${m.id}:ov:${field}`,
+    );
+  };
+  if (value === undefined) {
+    return (
+      <div className="field">
+        <span>
+          {label} : {formatNumber(base, 3)} (élément)
+        </span>
+        <button type="button" onClick={() => set(base)}>
+          Surcharger
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="field override">
+      <NumberField id={id} label={`${label} — surchargé`} value={value} onCommit={set} />
+      <button type="button" onClick={() => set(undefined)}>
+        Revenir à l'élément
+      </button>
+    </div>
+  );
+}
+
 function MeasurementEditor({ m }: { m: Measurement }) {
   const elements = useApp((s) => s.project.elements);
+  const levelHeights = useApp((s) => s.project.levelHeights);
   const levels = useApp((s) => s.project.levels);
   const el = elements.find((e) => e.id === m.elementId);
   const compatible = el ? elements.filter((e) => family(e.mode) === family(el.mode)) : elements;
@@ -252,6 +380,32 @@ function MeasurementEditor({ m }: { m: Measurement }) {
           </select>
         </div>
       )}
+      {el && !el.mode.startsWith("ouv") && el.mode !== "tremie" && (
+        <fieldset className="overrides">
+          <legend>Surcharges pour ce tracé</legend>
+          {dimFields(el.mode).map(({ field, label }) => (
+            <OverrideField
+              key={field}
+              m={m}
+              field={field}
+              label={label}
+              base={resolveDims(el, { ...m, overrides: undefined }, { levelHeights })[field]}
+            />
+          ))}
+          {hasOwnRatios(el.mode) && (
+            <>
+              <OverrideField m={m} field="ratioHA" label="Ratio HA (kg/m³)" base={el.ratioHA} />
+              <OverrideField m={m} field="ratioTS" label="Ratio TS (kg/m³)" base={el.ratioTS} />
+            </>
+          )}
+        </fieldset>
+      )}
+      {m.opening && (
+        <p className="muted small">
+          {m.opening.kind === "porte" ? "Porte" : "Fenêtre"} · allège{" "}
+          {formatNumber(m.opening.sill, 2)} m
+        </p>
+      )}
       <p className="muted small">
         Échelle {formatNumber(m.meta.scale * 1000, 3)} mm/unité ·{" "}
         {m.meta.method === "manual" ? "manuel" : "assisté"} ·{" "}
@@ -276,7 +430,7 @@ function MeasurementsTab() {
     <ul className="measurement-list" aria-label={`Tracés de la page ${page}`}>
       {list.map((m, i) => {
         const el = project.elements.find((e) => e.id === m.elementId);
-        const q = computeMeasurement(m, project.elements);
+        const q = computeMeasurement(m, project.elements, { levelHeights: project.levelHeights });
         const selected = m.id === selectedId;
         return (
           <li

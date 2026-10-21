@@ -816,3 +816,48 @@ kbd {
     transition: none !important;
   }
 }
+
+/* Phase 2 */
+.narrow {
+  width: 4.5rem;
+}
+.overlap-opt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.9rem;
+}
+.overlap-opt details {
+  flex-basis: 100%;
+}
+.overrides {
+  border: 1px solid var(--border, #8884);
+  border-radius: 6px;
+  margin: 0.5rem 0;
+  padding: 0.25rem 0.5rem;
+}
+.field.override {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.opening-panel fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0 0 0.5rem;
+}
+.opening-panel .row {
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+.opening-panel input[type="text"],
+.opening-panel input:not([type]),
+.opening-panel input[inputmode] {
+  width: 5rem;
+}
+.small {
+  font-size: 0.85rem;
+}

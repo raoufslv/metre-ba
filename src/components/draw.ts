@@ -214,3 +214,31 @@ export function hitTest(
   }
   return null;
 }
+
+/** Aperçu d'une ouverture en cours de tracé (glisser), avec sa largeur réelle si l'échelle est connue. */
+export function drawOpeningDraft(
+  ctx: CanvasRenderingContext2D,
+  pts: readonly [Pt, Pt],
+  px: number,
+  scale: number | null,
+): void {
+  ctx.save();
+  ctx.strokeStyle = PROBE_COLOR;
+  ctx.lineWidth = 4 * px;
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  ctx.lineTo(pts[1][0], pts[1][1]);
+  ctx.stroke();
+  ctx.fillStyle = PROBE_COLOR;
+  for (const p of pts) {
+    ctx.beginPath();
+    ctx.arc(p[0], p[1], 4 * px, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (scale !== null) {
+    const w = Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]) * scale;
+    ctx.font = `${12 * px}px sans-serif`;
+    ctx.fillText(`${w.toFixed(2).replace(".", ",")} m`, pts[1][0] + 6 * px, pts[1][1] - 6 * px);
+  }
+  ctx.restore();
+}

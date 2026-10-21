@@ -93,6 +93,7 @@ function useShortcuts(): void {
       else if (key === "t") setTool("draw");
       else if (key === "e") setTool("calibrate");
       else if (key === "k") setTool("verify");
+      else if (key === "o") setTool("opening");
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

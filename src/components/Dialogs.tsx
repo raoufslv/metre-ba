@@ -8,7 +8,16 @@ import {
 } from "../lib/calibration";
 import { formatNumber, formatQty } from "../lib/format";
 import { distance } from "../lib/geometry";
-import { notify, pageScale, setPageScale, setTool, useApp } from "../state/store";
+import { OPENING_DEFAULTS, buildOpening } from "../lib/openings";
+import {
+  addMeasurements,
+  newId,
+  notify,
+  pageScale,
+  setPageScale,
+  setTool,
+  useApp,
+} from "../state/store";
 
 // ---------- Étalonnage et vérification de cote ----------
 
@@ -182,6 +191,201 @@ export function ProbePanel() {
   );
 }
 
+// ---------- Ouverture rectangulaire (porte ou fenêtre) ----------
+
+export function OpeningPanel() {
+  const tool = useApp((s) => s.tool);
+  const draftPts = useApp((s) => s.openingDraft);
+  const elements = useApp((s) => s.project.elements);
+  const scale = useApp(pageScale);
+  const [kind, setKind] = useState<"porte" | "fenetre">("porte");
+  const [width, setWidth] = useState("");
+  const [height, setHeight] = useState("");
+  const [sill, setSill] = useState("");
+  const [targetId, setTargetId] = useState("");
+  const [withSill, setWithSill] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const widthRef = useRef<HTMLInputElement>(null);
+
+  const openingEl = elements.find((e) => e.mode === "ouv");
+  const walls = elements.filter((e) => e.mode === "ligne");
+  const sillEl = elements.find((e) => e.id === "appuis" && e.mode === "ligne");
+  const hasDraft = draftPts !== null && scale !== null;
+  const measured = hasDraft ? distance(draftPts[0], draftPts[1]) * scale : 0;
+
+  useEffect(() => {
+    if (!hasDraft) return;
+    setWidth(String(Number(measured.toFixed(2))).replace(".", ","));
+    setError(null);
+    widthRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftPts]);
+
+  useEffect(() => {
+    const d = OPENING_DEFAULTS[kind];
+    setHeight(String(d.height).replace(".", ","));
+    setSill(String(d.sill).replace(".", ","));
+    if (kind === "porte") setWithSill(false);
+  }, [kind]);
+
+  useEffect(() => {
+    if (!targetId || !walls.some((w) => w.id === targetId)) {
+      setTargetId(openingEl?.targetId ?? walls[0]?.id ?? "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elements]);
+
+  if (tool !== "opening") return null;
+  if (!hasDraft) {
+    return (
+      <section className="probe-panel" aria-label="Ouverture">
+        <p>
+          Ouverture : glissez sur le plan, le long du mur, la largeur de la porte ou de la fenêtre.
+          Vous préciserez ensuite ses dimensions exactes.
+        </p>
+        <button
+          type="button"
+          className="close"
+          aria-label="Fermer"
+          onClick={() => setTool("select")}
+        >
+          ×
+        </button>
+      </section>
+    );
+  }
+
+  function submit(e: FormEvent): void {
+    e.preventDefault();
+    const w = parseMeters(width);
+    const h = parseMeters(height);
+    const s = kind === "fenetre" ? parseMeters(sill) : 0;
+    if (!openingEl) return setError("Aucun élément de type ouverture dans le catalogue.");
+    if (!targetId) return setError("Choisissez le mur dont l'ouverture est déduite.");
+    if (w === null || w <= 0) return setError("Largeur invalide (ex. 0,90).");
+    if (h === null || h <= 0) return setError("Hauteur invalide (ex. 2,10).");
+    if (s === null || s < 0) return setError("Allège invalide (ex. 0,90).");
+    const st = useApp.getState();
+    const ms = buildOpening({
+      element: openingEl,
+      targetId,
+      kind,
+      p1: draftPts![0],
+      p2: draftPts![1],
+      width: w,
+      height: h,
+      sill: s,
+      level: st.project.level,
+      page: st.page,
+      scale: scale!,
+      ...(withSill && sillEl ? { sillElement: sillEl } : {}),
+      newId,
+    });
+    addMeasurements(ms);
+    useApp.setState({ openingDraft: null });
+    notify(
+      "success",
+      ms.length > 1
+        ? "Fenêtre et appui ajoutés."
+        : kind === "porte"
+          ? "Porte ajoutée."
+          : "Fenêtre ajoutée.",
+    );
+  }
+
+  return (
+    <section className="probe-panel opening-panel" aria-label="Paramètres de l'ouverture">
+      <form onSubmit={submit}>
+        <fieldset>
+          <legend>Type d'ouverture</legend>
+          <label className="check">
+            <input
+              type="radio"
+              name="op-kind"
+              checked={kind === "porte"}
+              onChange={() => setKind("porte")}
+            />
+            Porte (sans allège)
+          </label>
+          <label className="check">
+            <input
+              type="radio"
+              name="op-kind"
+              checked={kind === "fenetre"}
+              onChange={() => setKind("fenetre")}
+            />
+            Fenêtre (allège + appui)
+          </label>
+        </fieldset>
+        <div className="row">
+          <label htmlFor="op-w">Largeur (m)</label>
+          <input
+            id="op-w"
+            ref={widthRef}
+            inputMode="decimal"
+            value={width}
+            onChange={(e) => setWidth(e.target.value)}
+          />
+          <label htmlFor="op-h">Hauteur (m)</label>
+          <input
+            id="op-h"
+            inputMode="decimal"
+            value={height}
+            onChange={(e) => setHeight(e.target.value)}
+          />
+          {kind === "fenetre" && (
+            <>
+              <label htmlFor="op-s">Allège (m)</label>
+              <input
+                id="op-s"
+                inputMode="decimal"
+                value={sill}
+                onChange={(e) => setSill(e.target.value)}
+              />
+            </>
+          )}
+        </div>
+        <div className="row">
+          <label htmlFor="op-t">Déduire du mur</label>
+          <select id="op-t" value={targetId} onChange={(e) => setTargetId(e.target.value)}>
+            {walls.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        {kind === "fenetre" && sillEl && (
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={withSill}
+              onChange={(e) => setWithSill(e.target.checked)}
+            />
+            Ajouter aussi un appui de fenêtre (« {sillEl.name} »)
+          </label>
+        )}
+        <p className="muted small">
+          Largeur mesurée sur le plan : {formatNumber(measured, 2)} m ; la valeur saisie fait foi.
+        </p>
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="row">
+          <button type="submit" className="primary">
+            Ajouter l'ouverture
+          </button>
+          <button type="button" onClick={() => useApp.setState({ openingDraft: null })}>
+            Annuler
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
 // ---------- Boîte de dialogue modale générique ----------
 
 export function Modal({
@@ -222,6 +426,7 @@ const SHORTCUTS: [string, string][] = [
   ["T", "Outil Tracer avec l'élément actif"],
   ["E", "Étalonner l'échelle de la page"],
   ["K", "Vérifier une cote"],
+  ["O", "Outil Ouverture : glisser la largeur, puis préciser porte ou fenêtre"],
   ["Entrée / double-clic", "Terminer le tracé"],
   ["Échap", "Annuler le tracé en cours, puis la sélection"],
   ["Ctrl+Z", "Annuler (dernier point, sinon dernière action)"],

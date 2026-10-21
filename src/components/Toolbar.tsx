@@ -12,10 +12,12 @@ import {
 } from "../state/session";
 import {
   addLevel,
+  applyTemplate,
   finishDraft,
   notify,
   redoAction,
   setLevel,
+  setLevelHeight,
   setTool,
   undoAction,
   useApp,
@@ -23,11 +25,15 @@ import {
 } from "../state/store";
 import { downloadBlob, openBlob, slug } from "../ui/download";
 import { fitToScreen, zoomCenter } from "../ui/view";
+import { DEFAULT_LEVEL_HEIGHT } from "../lib/types";
+import { loadLibrary, saveLibrary } from "../lib/store";
+import { parseCatalog, serializeCatalog } from "../lib/templates";
 import type { FallbackContent } from "./Dialogs";
 
 const TOOLS: { id: Tool; label: string; key: string }[] = [
   { id: "select", label: "Sélection", key: "V" },
   { id: "draw", label: "Tracer", key: "T" },
+  { id: "opening", label: "Ouverture", key: "O" },
   { id: "calibrate", label: "Étalonner", key: "E" },
   { id: "verify", label: "Vérifier une cote", key: "K" },
 ];
@@ -43,6 +49,7 @@ export default function Toolbar({ onFallback }: { onFallback: (c: FallbackConten
   const level = useApp((s) => s.project.level);
   const draftLen = useApp((s) => s.draft.length);
   const prefs = useApp((s) => s.prefs);
+  const levelHeight = useApp((s) => s.project.levelHeights[s.project.level]);
   const hasMeasurements = useApp((s) => s.project.measurements.length > 0);
 
   const planInput = useRef<HTMLInputElement>(null);
@@ -51,6 +58,54 @@ export default function Toolbar({ onFallback }: { onFallback: (c: FallbackConten
   const [confirmReset, setConfirmReset] = useState(false);
   const [newLevel, setNewLevel] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const tplInput = useRef<HTMLInputElement>(null);
+  const [hText, setHText] = useState<string | null>(null);
+
+  function commitHeight(text: string): void {
+    const t = text.trim().replace(",", ".");
+    if (t === "") setLevelHeight(level, null);
+    else {
+      const n = Number(t);
+      if (!Number.isFinite(n) || n <= 0 || n > 20) {
+        notify("error", "Hauteur sous plafond invalide (nombre entre 0 et 20 m).");
+        return;
+      }
+      setLevelHeight(level, n);
+    }
+    setHText(null);
+  }
+
+  async function onTemplateChosen(file: File | undefined): Promise<void> {
+    if (!file) return;
+    try {
+      const r = parseCatalog(await file.text());
+      if (!r.ok) return notify("error", `Catalogue refusé : ${r.error}`);
+      applyTemplate(r.value);
+    } catch {
+      notify("error", "Lecture du fichier impossible.");
+    }
+  }
+
+  function exportTemplate(): void {
+    const text = serializeCatalog(useApp.getState().project.elements);
+    const blob = new Blob([text], { type: "application/json" });
+    if (!downloadBlob(blob, `${name()}-catalogue.json`)) onFallback({ title: "Catalogue", text });
+  }
+
+  function saveAsLibrary(): void {
+    const ok = saveLibrary(globalThis.localStorage, useApp.getState().project.elements);
+    notify(
+      ok ? "success" : "error",
+      ok
+        ? "Catalogue enregistré : il servira de base aux nouveaux projets."
+        : "Enregistrement impossible (stockage indisponible).",
+    );
+  }
+
+  function resetLibrary(): void {
+    saveLibrary(globalThis.localStorage, null);
+    notify("success", "Bibliothèque réinitialisée : catalogue d'usine pour les nouveaux projets.");
+  }
 
   function onPlanChosen(file: File | undefined): void {
     if (!file) return;
@@ -271,6 +326,20 @@ export default function Toolbar({ onFallback }: { onFallback: (c: FallbackConten
             <option key={l}>{l}</option>
           ))}
         </select>
+        <label htmlFor="level-h">H. plafond (m)</label>
+        <input
+          id="level-h"
+          className="narrow"
+          inputMode="decimal"
+          value={hText ?? String(levelHeight ?? DEFAULT_LEVEL_HEIGHT).replace(".", ",")}
+          onChange={(e) => setHText(e.target.value)}
+          onBlur={() => hText !== null && commitHeight(hText)}
+          onKeyDown={(e) => e.key === "Enter" && hText !== null && commitHeight(hText)}
+          aria-describedby="level-h-hint"
+        />
+        <span id="level-h-hint" className="sr-only">
+          Hauteur appliquée par défaut aux éléments à hauteur d'étage de ce niveau.
+        </span>
         {newLevel === null ? (
           <button type="button" aria-label="Ajouter un niveau" onClick={() => setNewLevel("")}>
             + Niveau
@@ -323,6 +392,41 @@ export default function Toolbar({ onFallback }: { onFallback: (c: FallbackConten
         <button type="button" onClick={redoAction} title="Rétablir (Ctrl+Maj+Z)">
           Rétablir
         </button>
+      </div>
+
+      <div className="group" role="group" aria-label="Gabarits">
+        <details className="menu">
+          <summary>Gabarits</summary>
+          <div className="menu-body">
+            <button type="button" onClick={exportTemplate}>
+              Exporter le catalogue (JSON)
+            </button>
+            <button type="button" onClick={() => tplInput.current?.click()}>
+              Charger un catalogue…
+            </button>
+            <input
+              ref={tplInput}
+              type="file"
+              accept="application/json,.json"
+              hidden
+              onChange={(e) => {
+                void onTemplateChosen(e.target.files?.[0]);
+                e.target.value = "";
+              }}
+            />
+            <hr />
+            <button type="button" onClick={saveAsLibrary}>
+              Enregistrer comme bibliothèque par défaut
+            </button>
+            <button
+              type="button"
+              onClick={resetLibrary}
+              disabled={loadLibrary(globalThis.localStorage) === null}
+            >
+              Revenir au catalogue d'usine
+            </button>
+          </div>
+        </details>
       </div>
 
       <div className="group" role="group" aria-label="Exports">

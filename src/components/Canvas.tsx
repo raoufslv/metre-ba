@@ -17,6 +17,7 @@ import {
 import {
   drawDraft,
   drawLabel,
+  drawOpeningDraft,
   drawProbe,
   drawReticle,
   drawShape,
@@ -24,7 +25,7 @@ import {
   liveLabel,
 } from "./draw";
 import { ScaleBar } from "./ScaleBar";
-import { ProbePanel } from "./Dialogs";
+import { OpeningPanel, ProbePanel } from "./Dialogs";
 import { openDemoPlan } from "../state/session";
 
 const RENDER_DELAY = 200;
@@ -32,6 +33,7 @@ const RENDER_DELAY = 200;
 type Drag =
   | { kind: "pan"; lastX: number; lastY: number }
   | { kind: "vertex"; id: string; index: number; started: boolean }
+  | { kind: "opening"; p1: Pt }
   | { kind: "press"; sx: number; sy: number };
 
 export default function PlanCanvas() {
@@ -99,6 +101,7 @@ export default function PlanCanvas() {
     if ((s.tool === "calibrate" || s.tool === "verify") && s.probe.length > 0) {
       drawProbe(ctx, s.probe, s.probe.length < 2 ? mouse.current : null, px);
     }
+    if (s.openingDraft) drawOpeningDraft(ctx, s.openingDraft, px, scale);
     if (reticle.current) drawReticle(ctx, reticle.current, px);
 
     const sm = screenMouse.current;
@@ -269,6 +272,16 @@ export default function PlanCanvas() {
     }
     if (e.button !== 0) return;
     const s = useApp.getState();
+    if (s.tool === "opening") {
+      if (pageScale(s) === null) {
+        notify("error", "Page non étalonnée : étalonnez l'échelle avant de tracer une ouverture.");
+        return;
+      }
+      const p = toPage(sx, sy);
+      drag.current = { kind: "opening", p1: p };
+      useApp.setState({ openingDraft: null });
+      return;
+    }
     if (s.tool === "select" && s.selectedId) {
       const m = s.project.measurements.find((x) => x.id === s.selectedId);
       if (m) {
@@ -293,6 +306,11 @@ export default function PlanCanvas() {
       panBy(sx - d.lastX, sy - d.lastY);
       d.lastX = sx;
       d.lastY = sy;
+      return;
+    }
+    if (d?.kind === "opening") {
+      useApp.setState({ openingDraft: [d.p1, e.shiftKey ? lockAngle(d.p1, p, 45) : p] });
+      suppressClick.current = true;
       return;
     }
     if (d?.kind === "vertex") {
@@ -329,6 +347,14 @@ export default function PlanCanvas() {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
     if (d?.kind === "pan" || d?.kind === "vertex") suppressClick.current = true;
+    if (d?.kind === "opening") {
+      suppressClick.current = true;
+      const od = useApp.getState().openingDraft;
+      const zoom = useApp.getState().view.zoom;
+      if (od && Math.hypot(od[1][0] - od[0][0], od[1][1] - od[0][1]) * zoom < 6) {
+        useApp.setState({ openingDraft: null });
+      }
+    }
   }
 
   function onClick(e: MouseEvent<HTMLCanvasElement>): void {
@@ -394,7 +420,7 @@ export default function PlanCanvas() {
     if (!spacePanned.current && reticle.current) clickAt(reticle.current, 1);
   }
 
-  const blocked = tool === "draw" && doc !== null && !calibrated;
+  const blocked = (tool === "draw" || tool === "opening") && doc !== null && !calibrated;
   const cursor = tool === "select" ? "default" : blocked ? "not-allowed" : "crosshair";
 
   return (
@@ -453,6 +479,7 @@ export default function PlanCanvas() {
         </div>
       )}
       {doc && <ProbePanel />}
+      {doc && <OpeningPanel />}
       {doc && <ScaleBar />}
     </div>
   );

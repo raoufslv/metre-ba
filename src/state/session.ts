@@ -1,4 +1,3 @@
-import { newProject } from "../lib/catalog";
 import {
   clearAll,
   loadPlan,
@@ -11,7 +10,7 @@ import {
   type Prefs,
 } from "../lib/store";
 import { openPlan, PlanError } from "../pdf/planDoc";
-import { loadProjectState, notify, useApp } from "./store";
+import { freshProject, loadProjectState, notify, useApp } from "./store";
 
 const set = useApp.setState;
 const get = useApp.getState;
@@ -61,7 +60,7 @@ export async function openPlanFile(file: File, keepMeasurements: boolean): Promi
   }
   const ok = await attachPlan(data, file.name);
   if (!ok) return;
-  if (!keepMeasurements) loadProjectState(newProject(baseName(file.name)));
+  if (!keepMeasurements) loadProjectState(freshProject(baseName(file.name)));
   const plan = get().plan!;
   try {
     await savePlan({ name: file.name, type: plan.mime, data, savedAt: new Date().toISOString() });
@@ -125,7 +124,7 @@ export async function resetProject(): Promise<void> {
   get().doc?.destroy();
   planBytes = null;
   set({ doc: null, plan: null, page: 1, pageSize: null });
-  loadProjectState(newProject());
+  loadProjectState(freshProject());
   try {
     await clearAll();
   } catch {

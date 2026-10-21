@@ -117,3 +117,25 @@ et unités.
 | 6   | Dallage 100 m², ép. 0,12, TS 32          | 12,00 m³ | (rives seules)              | TS 384 kg   |
 
 Totaux nets des cas 1, 2, 4 et 5 réunis : béton 8,78 m³, coffrage 74,24 m², HA 740,4 kg.
+
+## Phase 2 : hauteur de niveau, fenêtres, pertes, recouvrements
+
+**Hauteur de niveau.** Un élément « voile » ou « poteau » coché _Hauteur = hauteur sous plafond du
+niveau_ prend la hauteur du niveau du tracé (défaut 2,70 m). Priorité : surcharge du tracé > `h` du
+tracé (ouvertures) > hauteur du niveau (si coché) > `h` de l'élément.
+
+**Fenêtre** (ouverture avec allège `s`, largeur `W`, hauteur `H`, épaisseur du voile `e`) :
+béton −W·H·e ; coffrage −2·W·H + (W + 2H)·e (tableaux, `t1`) + W·e (tableau d'allège) ;
+avertissement si `s + H` dépasse la hauteur du voile. Une porte est une fenêtre sans allège ni appui.
+
+**Pertes / majorations** (% par élément) : `à commander = mesuré × (1 + p/100)`, séparément béton
+et acier. Les déductions (ouvertures, trémies) utilisent les pertes de leur cible. La quantité
+mesurée n'est jamais modifiée.
+
+**Recouvrements de coffrage** (option, désactivée par défaut, tolérance 0,10 m) — déduction portée
+par un seul des deux éléments, bornée à son coffrage brut :
+
+- voile contre voile (T, L) : a(arrivant) × min(h) ;
+- poteau contre voile : a(poteau) × min(h) ;
+- voile ou poteau sous plancher (`sr`) : longueur dans le plancher × a (poteau : a × b).
+  Seuls les éléments du même niveau et de la même page sont considérés.
