@@ -61,5 +61,37 @@ export function summaryToCsv(summary: Summary, { comma }: CsvOptions): string {
       n(t.orderSteel, 0),
     ].join(";"),
   );
+  if (summary.haByDiameter.length > 0) {
+    lines.push("");
+    lines.push(["Diamètre mm", "Nombre", "Longueur m", "Masse kg"].join(";"));
+    for (const d of summary.haByDiameter) {
+      lines.push([n(d.diameter, 0), n(d.count, 2), n(d.length, 2), n(d.kg, 2)].join(";"));
+    }
+  }
+  if (summary.meshes.length > 0) {
+    lines.push("");
+    lines.push(
+      [
+        "Treillis soudé",
+        "Panneaux",
+        "Surface à couvrir m²",
+        "Surface brute m²",
+        "Chutes m²",
+        "Masse kg",
+      ].join(";"),
+    );
+    for (const mesh of summary.meshes) {
+      lines.push(
+        [
+          cell(mesh.name),
+          n(mesh.panels, 0),
+          n(mesh.cover, 2),
+          n(mesh.gross, 2),
+          n(mesh.offcut, 2),
+          n(mesh.kg, 2),
+        ].join(";"),
+      );
+    }
+  }
   return lines.join("\r\n") + "\r\n";
 }

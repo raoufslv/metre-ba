@@ -1,7 +1,9 @@
 import { elementHeight, resolveDims, type CalcOptions, type Dims } from "./dims";
 import { polygonArea, polygonPerimeter, polylineLength } from "./geometry";
-import type { Coffrage, Element, Measurement, Mode, Project } from "./types";
 import { findJunctions } from "./junctions";
+import { detailSteel } from "./rebar";
+import type { HaDiameter, MeshTakeoff } from "./rebar";
+import type { Coffrage, Element, Measurement, Mode, Project } from "./types";
 
 export { elementHeight, levelHeight, resolveDims } from "./dims";
 export type { CalcOptions, Dims } from "./dims";
@@ -22,6 +24,10 @@ export interface MeasurementQuantities {
   ts: number;
   /** kg, HA + TS */
   steel: number;
+  /** Présent en mode détaillé : cumul des barres de ce tracé. */
+  diameters?: HaDiameter[];
+  /** Présent en mode détaillé lorsqu'un panneau est posé. */
+  meshInfo?: MeshTakeoff;
   warnings: string[];
 }
 
@@ -66,6 +72,34 @@ function withSteel(
   return { ...base, ha, ts, steel: ha + ts };
 }
 
+/** Ratio kg/m³, ou barres et treillis saisis quand l'élément est en mode détaillé. */
+function applySteel(
+  base: Omit<MeasurementQuantities, "ha" | "ts" | "steel">,
+  el: Element,
+  m: Measurement,
+  d: Dims,
+): MeasurementQuantities {
+  if ((el.steelMode ?? "ratio") !== "detail") return withSteel(base, d.ratioHA, d.ratioTS);
+  const spec = m.rebar ?? { bars: el.bars ?? [], mesh: el.mesh };
+  const detail = detailSteel({
+    mode: el.mode,
+    quantity: base.quantity,
+    a: d.a,
+    b: d.b,
+    bars: spec.bars,
+    mesh: spec.mesh,
+  });
+  return {
+    ...base,
+    warnings: [...base.warnings, ...detail.warnings],
+    ha: detail.ha,
+    ts: detail.ts,
+    steel: detail.ha + detail.ts,
+    diameters: detail.diameters,
+    meshInfo: detail.meshInfo,
+  };
+}
+
 function badCoffrage(el: Element): string {
   return `Coffrage « ${el.cof} » incompatible avec le mode « ${el.mode} » : coffrage compté nul.`;
 }
@@ -100,7 +134,7 @@ export function computeMeasurement(
       else if (el.cof === "f3") formwork = L * (d.a + 2 * d.h);
       else if (el.cof === "f1") formwork = L * d.h;
       else if (el.cof !== "f0") warnings.push(badCoffrage(el));
-      return withSteel({ quantity: L, unit, concrete, formwork, warnings }, d.ratioHA, d.ratioTS);
+      return applySteel({ quantity: L, unit, concrete, formwork, warnings }, el, m, d);
     }
     case "surface": {
       const S = polygonArea(m.pts) * k * k;
@@ -110,14 +144,14 @@ export function computeMeasurement(
       if (el.cof === "sr") formwork = S + P * d.a;
       else if (el.cof === "r") formwork = P * d.a;
       else if (el.cof !== "f0") warnings.push(badCoffrage(el));
-      return withSteel({ quantity: S, unit, concrete, formwork, warnings }, d.ratioHA, d.ratioTS);
+      return applySteel({ quantity: S, unit, concrete, formwork, warnings }, el, m, d);
     }
     case "point": {
       const concrete = d.a * d.b * d.h;
       let formwork = 0;
       if (el.cof === "pt") formwork = 2 * (d.a + d.b) * d.h;
       else if (el.cof !== "f0") warnings.push(badCoffrage(el));
-      return withSteel({ quantity: 1, unit, concrete, formwork, warnings }, d.ratioHA, d.ratioTS);
+      return applySteel({ quantity: 1, unit, concrete, formwork, warnings }, el, m, d);
     }
     case "ouv":
     case "tremie":
@@ -160,8 +194,9 @@ function computeDeduction(
     if (m.opening?.kind === "fenetre" && wallH > 0 && m.opening.sill + d.h > wallH + 1e-9) {
       warnings.push("Allège + hauteur de la fenêtre dépassent la hauteur du voile.");
     }
-    return withSteel(
+    return deductionSteel(
       { quantity: W, unit, concrete, formwork, warnings },
+      target,
       target.ratioHA,
       target.ratioTS,
     );
@@ -173,11 +208,32 @@ function computeDeduction(
   let formwork = target.cof === "sr" ? -A : 0;
   if (el.cof === "rv") formwork += P * e;
   else if (el.cof !== "r0") warnings.push(badCoffrage(el));
-  return withSteel(
+  return deductionSteel(
     { quantity: A, unit, concrete, formwork, warnings },
+    target,
     target.ratioHA,
     target.ratioTS,
   );
+}
+
+/** Une cible en mode détaillé ne perd pas ses barres toute seule : l'acier déduit est nul, signalé. */
+function deductionSteel(
+  base: Omit<MeasurementQuantities, "ha" | "ts" | "steel">,
+  target: Element,
+  ratioHA: number,
+  ratioTS: number,
+): MeasurementQuantities {
+  if ((target.steelMode ?? "ratio") !== "detail") return withSteel(base, ratioHA, ratioTS);
+  return {
+    ...base,
+    ha: 0,
+    ts: 0,
+    steel: 0,
+    warnings: [
+      ...base.warnings,
+      "Cible en ferraillage détaillé : l'acier de cette déduction n'est pas retiré automatiquement. Ajustez les barres.",
+    ],
+  };
 }
 
 /** Une proposition IA non relue ne compte pas dans les totaux. */
@@ -227,6 +283,10 @@ export interface Summary {
   pending: number;
   /** Jonctions retenues pour la déduction de recouvrement (option active). */
   junctions: import("./junctions").Junction[];
+  /** Barres HA du mode détaillé, cumulées par diamètre. */
+  haByDiameter: HaDiameter[];
+  /** Panneaux de treillis du mode détaillé, cumulés par désignation et format. */
+  meshes: MeshTakeoff[];
 }
 
 export type SummaryInput = Pick<Project, "elements" | "levels" | "measurements"> &
@@ -277,6 +337,8 @@ export function summarize(
   }
 
   const rows = new Map<string, SummaryRow>();
+  const diameters = new Map<number, HaDiameter>();
+  const meshes = new Map<string, MeshTakeoff>();
   const totals: Totals = {
     concrete: 0,
     formwork: 0,
@@ -333,6 +395,35 @@ export function summarize(
     totals.steel += q.steel;
     totals.orderConcrete += q.concrete * fc;
     totals.orderSteel += q.steel * fs;
+    for (const dia of q.diameters ?? []) {
+      const acc = diameters.get(dia.diameter) ?? {
+        diameter: dia.diameter,
+        count: 0,
+        length: 0,
+        kg: 0,
+      };
+      acc.count += dia.count;
+      acc.length += dia.length;
+      acc.kg += dia.kg;
+      diameters.set(dia.diameter, acc);
+    }
+    if (q.meshInfo) {
+      const key = `${q.meshInfo.name}\u0000${q.meshInfo.width}\u0000${q.meshInfo.length}\u0000${q.meshInfo.massPerM2}`;
+      const acc = meshes.get(key) ?? {
+        ...q.meshInfo,
+        panels: 0,
+        cover: 0,
+        gross: 0,
+        offcut: 0,
+        kg: 0,
+      };
+      acc.panels += q.meshInfo.panels;
+      acc.cover += q.meshInfo.cover;
+      acc.gross += q.meshInfo.gross;
+      acc.offcut += q.meshInfo.offcut;
+      acc.kg += q.meshInfo.kg;
+      meshes.set(key, acc);
+    }
   }
 
   const elOrder = new Map(project.elements.map((e, i) => [e.id, i]));
@@ -343,5 +434,12 @@ export function summarize(
       (elOrder.get(x.elementId) ?? last) - (elOrder.get(y.elementId) ?? last) ||
       (lvOrder.get(x.level) ?? last) - (lvOrder.get(y.level) ?? last),
   );
-  return { rows: sorted, totals, pending, junctions };
+  return {
+    rows: sorted,
+    totals,
+    pending,
+    junctions,
+    haByDiameter: [...diameters.values()].sort((a, b) => a.diameter - b.diameter),
+    meshes: [...meshes.values()],
+  };
 }

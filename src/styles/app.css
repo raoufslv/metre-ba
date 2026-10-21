@@ -861,3 +861,42 @@ kbd {
 .small {
   font-size: 0.85rem;
 }
+.rebar-editor,
+.steel-detail {
+  margin-top: 0.5rem;
+}
+.rebar-title {
+  font-size: 0.9rem;
+  margin: 0.6rem 0 0.3rem;
+}
+.bar-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.rebar-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.6rem;
+  margin: 0.3rem 0;
+}
+.rebar-field {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.75rem;
+  gap: 0.1rem;
+}
+.rebar-field input {
+  width: 6.5rem;
+}
+.steel-detail table {
+  margin-top: 0.4rem;
+}
+.steel-detail caption {
+  text-align: left;
+  font-weight: 600;
+  margin-bottom: 0.2rem;
+}

@@ -153,3 +153,17 @@ tracés (plan révisé) » (mêmes numéros de page). Rien n'est effacé sans ce
 - D23 : appliquer un catalogue conserve les éléments utilisés par des tracés mais absents du gabarit.
 - D24 : bibliothèque par défaut dans localStorage (`metre-ba:library`) ; nouveaux projets l'utilisent.
 - D25 : l'ouverture se trace par glisser, la largeur saisie fait foi (le second point est recalé).
+
+## Phase 3
+
+- D26 : le mode d'acier est par élément, « ratio » par défaut. Un projet antérieur (sans `steelMode`)
+  reste en ratio : ses quantités ne changent pas.
+- D27 : en mode détaillé, le lot de barres et le panneau sont comptés une fois par tracé. Une longueur
+  différente se fait en dupliquant l'élément ou en surchargeant le tracé. Aucune longueur normative
+  (recouvrement, crochet, ancrage) n'est proposée.
+- D28 : la masse linéique HA est la formule demandée 0,00617 × d². Aucune masse de panneau n'est
+  codée : l'utilisateur la saisit, l'écran la marque « à vérifier ».
+- D29 : le nombre de panneaux est l'arrondi supérieur de la surface à couvrir divisée par la surface
+  utile (recouvrement retiré dans les deux sens). La masse porte sur la surface brute.
+- D30 : une déduction vers une cible en mode détaillé ne retire pas d'acier (avertissement). Le béton
+  et le coffrage restent déduits.

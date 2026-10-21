@@ -139,3 +139,22 @@ par un seul des deux éléments, bornée à son coffrage brut :
 - poteau contre voile : a(poteau) × min(h) ;
 - voile ou poteau sous plancher (`sr`) : longueur dans le plancher × a (poteau : a × b).
   Seuls les éléments du même niveau et de la même page sont considérés.
+
+## Phase 3 : aciers détaillés
+
+Par élément, le mode **ratio** (défaut, kg/m³ × volume) ou le mode **détaillé**. En mode détaillé le
+ratio est ignoré. Le lot décrit est compté **une fois par tracé** de l'élément (un tracé peut
+porter son propre lot).
+
+**HA.** Longueur développée = longueur + (nombre de recouvrements × longueur d'un recouvrement) +
+(nombre de crochets × longueur d'un crochet). Masse = nombre × longueur développée × 0,00617 × d²
+(kg, d en mm). Cumul par diamètre. Aucune longueur d'ancrage n'est ajoutée si elle n'est pas saisie.
+
+**Treillis.** Surface utile d'un panneau = (largeur − recouvrement) × (longueur − recouvrement).
+Nombre de panneaux = arrondi supérieur de (surface à couvrir / surface utile). Surface brute =
+nombre × largeur × longueur. Chutes = brute − surface à couvrir. Masse = brute × masse au m²
+**saisie** (fiche fabricant). Surface à couvrir : aire mesurée (surface), longueur × largeur de
+nappe saisie (linéaire), emprise a × b (poteau).
+
+Une ouverture ou une trémie dont la cible est en mode détaillé ne retire pas d'acier
+automatiquement : le béton et le coffrage sont déduits, l'acier reste à ajuster dans les barres.

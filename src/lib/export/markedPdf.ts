@@ -260,7 +260,23 @@ function summaryPages(
       .map(([p, s]) => `p. ${p} : 1 unité = ${formatNumber(s * 1000, 3)} mm`)
       .join(" ; ");
     if (scales) text(`Échelles : ${scales}`, left, fy, 8);
-    fy -= 16;
+    fy -= 14;
+    if (start === 0 && summary.haByDiameter.length > 0) {
+      const ha = summary.haByDiameter
+        .map((d) => `Ø${formatNumber(d.diameter, 0)} : ${formatNumber(d.kg, 1)} kg`)
+        .join(" ; ");
+      text(`HA détaillé par diamètre — ${ha}`.slice(0, 140), left, fy, 8);
+      fy -= 12;
+    }
+    if (start === 0 && summary.meshes.length > 0) {
+      const ts = summary.meshes
+        .map(
+          (mesh) => `${mesh.name} : ${mesh.panels} pan., chutes ${formatNumber(mesh.offcut, 1)} m²`,
+        )
+        .join(" ; ");
+      text(`Treillis (masse saisie, à vérifier) — ${ts}`.slice(0, 140), left, fy, 8);
+      fy -= 12;
+    }
     text(DISCLAIMER, left, fy, 10, true);
   }
 }

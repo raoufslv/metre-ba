@@ -216,5 +216,27 @@ export async function buildWorkbook(project: Project, now = new Date()): Promise
   audit.addRow([]);
   audit.addRow([`Export du ${now.toISOString()} — ${DISCLAIMER}`]);
 
+  if (summary.haByDiameter.length > 0 || summary.meshes.length > 0) {
+    const steel = wb.addWorksheet("Aciers détaillés");
+    header(steel, ["Diamètre mm", "Nombre", "Longueur m", "Masse kg"], [16, 12, 14, 14]);
+    for (const d of summary.haByDiameter) {
+      steel.addRow([d.diameter, d.count, d.length, d.kg]);
+    }
+    steel.addRow([]);
+    steel.addRow(["Treillis soudé — masse au m² saisie, à vérifier sur la fiche fabricant"]).font =
+      {
+        italic: true,
+      };
+    steel.addRow(["Désignation", "Panneaux", "À couvrir m²", "Brute m²", "Chutes m²", "Masse kg"]);
+    for (const mesh of summary.meshes) {
+      steel.addRow([mesh.name, mesh.panels, mesh.cover, mesh.gross, mesh.offcut, mesh.kg]);
+    }
+    steel.addRow([]);
+    steel.addRow([
+      "Masse linéique HA = 0,00617 × d² kg/m. Le lot de barres est compté pour chaque tracé.",
+    ]).font = { italic: true };
+    formats(steel, { 1: F0, 2: F2, 3: F2, 4: F2 });
+  }
+
   return (await wb.xlsx.writeBuffer()) as ArrayBuffer;
 }

@@ -190,6 +190,79 @@ export default function SummaryTable() {
               </tfoot>
             </table>
           )}
+          {(summary.haByDiameter.length > 0 || summary.meshes.length > 0) && (
+            <div className="steel-detail">
+              <p className="muted small">
+                Ferraillage détaillé, à vérifier. La masse des panneaux est celle que vous avez
+                saisie. Le lot de barres est compté pour chaque tracé.
+              </p>
+              {summary.haByDiameter.length > 0 && (
+                <table>
+                  <caption>Acier HA par diamètre</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Diamètre mm</th>
+                      <th scope="col" className="num">
+                        Nombre
+                      </th>
+                      <th scope="col" className="num">
+                        Longueur m
+                      </th>
+                      <th scope="col" className="num">
+                        Masse kg
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summary.haByDiameter.map((d) => (
+                      <tr key={d.diameter}>
+                        <th scope="row">Ø {formatNumber(d.diameter, 0)}</th>
+                        <td className="num">{formatNumber(d.count, 0)}</td>
+                        <td className="num">{formatNumber(d.length, 2)}</td>
+                        <td className="num">{formatNumber(d.kg, 2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {summary.meshes.length > 0 && (
+                <table>
+                  <caption>Treillis soudé</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Panneau</th>
+                      <th scope="col" className="num">
+                        Nombre
+                      </th>
+                      <th scope="col" className="num">
+                        À couvrir m²
+                      </th>
+                      <th scope="col" className="num">
+                        Chutes m²
+                      </th>
+                      <th scope="col" className="num">
+                        Masse kg
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summary.meshes.map((mesh) => (
+                      <tr key={`${mesh.name}|${mesh.width}|${mesh.length}|${mesh.massPerM2}`}>
+                        <th scope="row">
+                          {mesh.name} ({formatNumber(mesh.width, 2)} ×{" "}
+                          {formatNumber(mesh.length, 2)} m)
+                        </th>
+                        <td className="num">{formatNumber(mesh.panels, 0)}</td>
+                        <td className="num">{formatNumber(mesh.cover, 2)}</td>
+                        <td className="num">{formatNumber(mesh.offcut, 2)}</td>
+                        <td className="num">{formatNumber(mesh.kg, 2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
           {summary.pending > 0 && (
             <p className="muted pad">
               {summary.pending} proposition(s) non relue(s) exclue(s) des totaux.

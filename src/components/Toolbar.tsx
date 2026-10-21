@@ -445,7 +445,7 @@ export default function Toolbar({ onFallback }: { onFallback: (c: FallbackConten
               Décimale virgule
             </label>
             <button type="button" onClick={() => void exportBinary("xlsx")}>
-              Excel (4 feuilles)
+              Excel
             </button>
             <button type="button" onClick={() => void exportBinary("pdf")} disabled={!plan}>
               PDF annoté

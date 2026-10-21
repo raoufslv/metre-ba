@@ -78,6 +78,7 @@ src/
   lib/            calculs purs, sans React ni DOM (testés, couverture ≥ 90 %)
     geometry.ts     aire (lacet), périmètre, polyligne, accrochage, verrouillage d'angle
     quantities.ts   béton, coffrage, acier par tracé ; récapitulatif élément × niveau
+    rebar.ts        acier détaillé : barres HA (0,00617 × d²) et panneaux de treillis saisis
     calibration.ts  échelle par page, vérification de cote, règle
     catalog.ts      catalogue par défaut et palette contrastée
     store.ts        IndexedDB, import/export JSON validé, préférences

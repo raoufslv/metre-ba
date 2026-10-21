@@ -130,6 +130,40 @@ function checkElement(e: unknown, i: number): string | null {
   for (const k of ["lossConcrete", "lossSteel"] as const) {
     if (e[k] !== undefined && !isNonNeg(e[k])) return `${where} : perte invalide.`;
   }
+  if (e.steelMode !== undefined && e.steelMode !== "ratio" && e.steelMode !== "detail") {
+    return `${where} : mode d'acier invalide.`;
+  }
+  const bars = checkBars(e.bars, where);
+  if (bars) return bars;
+  const mesh = checkMesh(e.mesh, where);
+  if (mesh) return mesh;
+  return null;
+}
+
+function checkBars(raw: unknown, where: string): string | null {
+  if (raw === undefined) return null;
+  if (!Array.isArray(raw)) return `${where} : liste de barres invalide.`;
+  for (const [i, b] of raw.entries()) {
+    const at = `${where}, barre n° ${i + 1}`;
+    if (!isObj(b) || typeof b.id !== "string" || !b.id) return `${at} : identifiant manquant.`;
+    if (!isNonNeg(b.diameter)) return `${at} : diamètre invalide.`;
+    for (const k of ["count", "length", "laps", "lapLength", "hooks", "hookLength"] as const) {
+      if (!isNonNeg(b[k])) return `${at} : « ${k} » invalide.`;
+    }
+  }
+  return null;
+}
+
+function checkMesh(raw: unknown, where: string): string | null {
+  if (raw === undefined) return null;
+  if (!isObj(raw) || typeof raw.name !== "string")
+    return `${where} : panneau de treillis invalide.`;
+  for (const k of ["width", "length", "massPerM2", "overlap"] as const) {
+    if (!isNonNeg(raw[k])) return `${where} : treillis, « ${k} » invalide.`;
+  }
+  if (raw.coverWidth !== undefined && !isNonNeg(raw.coverWidth)) {
+    return `${where} : largeur de nappe invalide.`;
+  }
   return null;
 }
 
@@ -165,6 +199,14 @@ function checkMeasurement(m: unknown, i: number): string | null {
     for (const v of Object.values(m.overrides)) {
       if (!isNonNeg(v)) return `${where} : surcharge invalide.`;
     }
+  }
+  if (m.rebar !== undefined) {
+    if (!isObj(m.rebar)) return `${where} : ferraillage invalide.`;
+    const bars = checkBars(m.rebar.bars, where);
+    if (bars) return bars;
+    if (m.rebar.bars === undefined) return `${where} : ferraillage sans liste de barres.`;
+    const mesh = checkMesh(m.rebar.mesh, where);
+    if (mesh) return mesh;
   }
   if (m.opening !== undefined) {
     const o = m.opening;
