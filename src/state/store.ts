@@ -2,15 +2,18 @@ import { create } from "zustand";
 import { isCalibrated, rescaleMeasurements } from "../lib/calibration";
 import { newProject } from "../lib/catalog";
 import { deleteElement, duplicateElement } from "../lib/elements";
+import { MAX_REVISIONS, takeSnapshot } from "../lib/revisions";
 import { dedupeConsecutive } from "../lib/geometry";
 import { applyCatalog } from "../lib/templates";
 import type { Settings } from "../lib/types";
 import { createHistory, record, redo, undo, type History } from "../lib/history";
 import { DEFAULT_PREFS, loadLibrary, type Prefs } from "../lib/store";
-import type { Element, Measurement, Mode, Project, Pt } from "../lib/types";
+import type { Annotation, Element, Measurement, Mode, Project, Pt } from "../lib/types";
 import type { PlanDoc } from "../pdf/planDoc";
 
-export type Tool = "select" | "draw" | "opening" | "calibrate" | "verify";
+export type Tool = "select" | "draw" | "opening" | "annotate" | "calibrate" | "verify";
+
+export type AnnotateKind = "text" | "arrow" | "cloud";
 
 export interface View {
   zoom: number;
@@ -38,6 +41,17 @@ export interface AppState {
   page: number;
   pageSize: { width: number; height: number } | null;
   tool: Tool;
+  annotateKind: AnnotateKind;
+  /** « current » ne montre que le niveau actif. L'affichage ne change pas les totaux. */
+  planLevel: "all" | "current";
+  /** Coins vectoriels de la page affichée, pour l'accrochage. */
+  snapPoints: Pt[];
+  /** Échelle lue sur la page, en attente de confirmation. */
+  scaleOffer: number | null;
+  dismissedScale: number[];
+  /** Point d'un texte d'annotation en attente de saisie. */
+  textDraft: Pt | null;
+  revisionsOpen: boolean;
   activeElementId: string;
   draft: Pt[];
   /** Rectangle d'ouverture tracé (glisser) en attente de ses paramètres. */
@@ -82,6 +96,13 @@ export const useApp = create<AppState>(() => ({
   page: 1,
   pageSize: null,
   tool: "select",
+  annotateKind: "text",
+  planLevel: "all",
+  snapPoints: [],
+  scaleOffer: null,
+  dismissedScale: [],
+  textDraft: null,
+  revisionsOpen: false,
   activeElementId: initialProject.elements[0]!.id,
   draft: [],
   openingDraft: null,
@@ -160,6 +181,8 @@ export function loadProjectState(project: Project): void {
     selectedId: null,
     hoverId: null,
     tool: "select",
+    textDraft: null,
+    scaleOffer: null,
   });
 }
 
@@ -171,6 +194,7 @@ export function setTool(tool: Tool): void {
     draft: [],
     probe: [],
     openingDraft: null,
+    textDraft: null,
     ...(tool !== "select" ? { selectedId: null } : {}),
   });
 }
@@ -181,7 +205,8 @@ export function selectElement(id: string): void {
 
 export function cancelCurrent(): void {
   const s = get();
-  if (s.openingDraft) set({ openingDraft: null });
+  if (s.textDraft) set({ textDraft: null });
+  else if (s.openingDraft) set({ openingDraft: null });
   else if (s.draft.length || s.probe.length) set({ draft: [], probe: [] });
   else if (s.selectedId) set({ selectedId: null });
   else if (s.tool !== "select") set({ tool: "select" });
@@ -342,6 +367,64 @@ export function applyTemplate(elements: Element[]): void {
 /** Ajoute les tracés d'une ouverture déjà construite. */
 export function addMeasurements(ms: Measurement[]): void {
   commit((p) => ({ ...p, measurements: [...p.measurements, ...ms] }));
+}
+
+export function toggleHidden(id: string): void {
+  commit((p) => {
+    const hidden = new Set(p.settings.hiddenElementIds);
+    if (hidden.has(id)) hidden.delete(id);
+    else hidden.add(id);
+    return { ...p, settings: { ...p.settings, hiddenElementIds: [...hidden] } };
+  }, `hide:${id}`);
+}
+
+export function setShowLabels(showLabels: boolean): void {
+  commit((p) => ({ ...p, settings: { ...p.settings, showLabels } }), "labels");
+}
+
+export function addAnnotation(annotation: Annotation): void {
+  commit((p) => ({ ...p, annotations: [...p.annotations, annotation] }));
+}
+
+/** Termine le nuage de révision en cours. */
+export function finishCloud(): boolean {
+  const s = get();
+  const pts = dedupeConsecutive(s.draft);
+  if (pts.length < 3) {
+    notify("error", "Un nuage demande au moins 3 sommets.");
+    return false;
+  }
+  addAnnotation({ id: newId(), kind: "cloud", page: s.page, pts });
+  set({ draft: [] });
+  return true;
+}
+
+export function deleteAnnotation(id: string): void {
+  commit((p) => ({ ...p, annotations: p.annotations.filter((a) => a.id !== id) }));
+  if (get().selectedId === id) set({ selectedId: null });
+}
+
+/** Enregistre une version nommée. Au-delà de 20, la plus ancienne est retirée. */
+export function saveRevision(name: string): boolean {
+  const n = name.trim();
+  if (!n) return false;
+  commit((p) => {
+    const revision = {
+      id: newId(),
+      name: n,
+      savedAt: new Date().toISOString(),
+      snapshot: takeSnapshot(p),
+    };
+    const revisions = [...p.revisions, revision];
+    if (revisions.length > MAX_REVISIONS) revisions.shift();
+    return { ...p, revisions };
+  });
+  notify("success", `Version « ${n} » enregistrée.`);
+  return true;
+}
+
+export function deleteRevision(id: string): void {
+  commit((p) => ({ ...p, revisions: p.revisions.filter((r) => r.id !== id) }));
 }
 
 export function setLevel(level: string): void {

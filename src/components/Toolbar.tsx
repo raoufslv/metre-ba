@@ -18,6 +18,7 @@ import {
   redoAction,
   setLevel,
   setLevelHeight,
+  setShowLabels,
   setTool,
   undoAction,
   useApp,
@@ -34,6 +35,7 @@ const TOOLS: { id: Tool; label: string; key: string }[] = [
   { id: "select", label: "Sélection", key: "V" },
   { id: "draw", label: "Tracer", key: "T" },
   { id: "opening", label: "Ouverture", key: "O" },
+  { id: "annotate", label: "Annotation", key: "A" },
   { id: "calibrate", label: "Étalonner", key: "E" },
   { id: "verify", label: "Vérifier une cote", key: "K" },
 ];
@@ -50,6 +52,8 @@ export default function Toolbar({ onFallback }: { onFallback: (c: FallbackConten
   const draftLen = useApp((s) => s.draft.length);
   const prefs = useApp((s) => s.prefs);
   const levelHeight = useApp((s) => s.project.levelHeights[s.project.level]);
+  const planLevel = useApp((s) => s.planLevel);
+  const showLabels = useApp((s) => s.project.settings.showLabels);
   const hasMeasurements = useApp((s) => s.project.measurements.length > 0);
 
   const planInput = useRef<HTMLInputElement>(null);
@@ -340,6 +344,17 @@ export default function Toolbar({ onFallback }: { onFallback: (c: FallbackConten
         <span id="level-h-hint" className="sr-only">
           Hauteur appliquée par défaut aux éléments à hauteur d'étage de ce niveau.
         </span>
+        <label htmlFor="plan-level">Afficher</label>
+        <select
+          id="plan-level"
+          value={planLevel}
+          onChange={(e) =>
+            useApp.setState({ planLevel: e.target.value === "current" ? "current" : "all" })
+          }
+        >
+          <option value="all">Tous les niveaux</option>
+          <option value="current">Niveau actif</option>
+        </select>
         {newLevel === null ? (
           <button type="button" aria-label="Ajouter un niveau" onClick={() => setNewLevel("")}>
             + Niveau
@@ -386,6 +401,22 @@ export default function Toolbar({ onFallback }: { onFallback: (c: FallbackConten
         >
           Terminer
         </button>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={prefs.snap}
+            onChange={(e) => updatePrefs({ snap: e.target.checked })}
+          />
+          Accrochage
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={showLabels}
+            onChange={(e) => setShowLabels(e.target.checked)}
+          />
+          Étiquettes
+        </label>
         <button type="button" onClick={undoAction} title="Annuler (Ctrl+Z)">
           Annuler
         </button>
@@ -478,6 +509,12 @@ export default function Toolbar({ onFallback }: { onFallback: (c: FallbackConten
           }}
         >
           {THEMES[prefs.theme]}
+        </button>
+        <button type="button" onClick={() => useApp.setState({ revisionsOpen: true })}>
+          Révisions
+        </button>
+        <button type="button" onClick={() => window.print()}>
+          Imprimer
         </button>
         <button
           type="button"

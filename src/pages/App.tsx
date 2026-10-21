@@ -7,9 +7,13 @@ import Toolbar from "../components/Toolbar";
 import { fitToScreen, zoomCenter } from "../ui/view";
 import { DISCLAIMER } from "../lib/export/report";
 import { goToPage, restoreSession, startAutosave } from "../state/session";
+import ReportSheet from "../components/Report";
+import RevisionsDialog from "../components/Revisions";
 import {
   cancelCurrent,
+  deleteAnnotation,
   deleteMeasurement,
+  finishCloud,
   finishDraft,
   redoAction,
   setTool,
@@ -56,13 +60,18 @@ function useShortcuts(): void {
           if (s.tool === "draw" && s.draft.length > 0) {
             e.preventDefault();
             finishDraft();
+          } else if (s.tool === "annotate" && s.annotateKind === "cloud" && s.draft.length > 0) {
+            e.preventDefault();
+            finishCloud();
           }
           return;
         case "Delete":
         case "Backspace":
           if (s.selectedId) {
             e.preventDefault();
-            deleteMeasurement(s.selectedId);
+            if (s.project.annotations.some((a) => a.id === s.selectedId)) {
+              deleteAnnotation(s.selectedId);
+            } else deleteMeasurement(s.selectedId);
           }
           return;
         case "?":
@@ -94,6 +103,7 @@ function useShortcuts(): void {
       else if (key === "e") setTool("calibrate");
       else if (key === "k") setTool("verify");
       else if (key === "o") setTool("opening");
+      else if (key === "a") setTool("annotate");
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -156,24 +166,28 @@ export default function App() {
   }, []);
 
   return (
-    <div className="app">
-      <a className="skip-link" href="#plan-zone">
-        Aller au plan
-      </a>
-      <Toolbar onFallback={setFallback} />
-      <div className="workspace">
-        <Sidebar />
-        <main id="plan-zone" className="plan-zone" aria-label="Plan">
-          <PlanCanvas />
-        </main>
+    <>
+      <div className="app">
+        <a className="skip-link" href="#plan-zone">
+          Aller au plan
+        </a>
+        <Toolbar onFallback={setFallback} />
+        <div className="workspace">
+          <Sidebar />
+          <main id="plan-zone" className="plan-zone" aria-label="Plan">
+            <PlanCanvas />
+          </main>
+        </div>
+        <SummaryTable />
+        <footer className="footer">
+          <strong>{DISCLAIMER}</strong> Les plans restent dans votre navigateur : aucun envoi.
+        </footer>
+        <NoticeBar />
+        <HelpDialog />
+        <RevisionsDialog />
+        <ExportFallback content={fallback} onClose={() => setFallback(null)} />
       </div>
-      <SummaryTable />
-      <footer className="footer">
-        <strong>{DISCLAIMER}</strong> Les plans restent dans votre navigateur : aucun envoi.
-      </footer>
-      <NoticeBar />
-      <HelpDialog />
-      <ExportFallback content={fallback} onClose={() => setFallback(null)} />
-    </div>
+      <ReportSheet />
+    </>
   );
 }

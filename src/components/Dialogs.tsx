@@ -10,6 +10,7 @@ import { formatNumber, formatQty } from "../lib/format";
 import { distance } from "../lib/geometry";
 import { OPENING_DEFAULTS, buildOpening } from "../lib/openings";
 import {
+  addAnnotation,
   addMeasurements,
   newId,
   notify,
@@ -427,6 +428,8 @@ const SHORTCUTS: [string, string][] = [
   ["E", "Étalonner l'échelle de la page"],
   ["K", "Vérifier une cote"],
   ["O", "Outil Ouverture : glisser la largeur, puis préciser porte ou fenêtre"],
+  ["A", "Outil Annotation (texte, flèche, nuage) — hors quantités"],
+  ["Maj", "Verrouiller l'angle à 45°/90° (l'emporte sur l'accrochage)"],
   ["Entrée / double-clic", "Terminer le tracé"],
   ["Échap", "Annuler le tracé en cours, puis la sélection"],
   ["Ctrl+Z", "Annuler (dernier point, sinon dernière action)"],
@@ -506,5 +509,89 @@ export function ExportFallback({
         {copied && <span role="status">Copié.</span>}
       </div>
     </Modal>
+  );
+}
+
+/** Outil Annotation : texte, flèche (2 clics) ou nuage (comme une surface). Hors quantités. */
+export function AnnotatePanel() {
+  const tool = useApp((s) => s.tool);
+  const kind = useApp((s) => s.annotateKind);
+  const textAt = useApp((s) => s.textDraft);
+  const draft = useApp((s) => s.draft.length);
+  const [text, setText] = useState("");
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (textAt) {
+      setText("");
+      input.current?.focus();
+    }
+  }, [textAt]);
+  if (tool !== "annotate") return null;
+  return (
+    <section className="probe-panel" aria-label="Annotation">
+      <div className="row" role="group" aria-label="Type d'annotation">
+        {(
+          [
+            ["text", "Texte"],
+            ["arrow", "Flèche"],
+            ["cloud", "Nuage"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={kind === id}
+            onClick={() => useApp.setState({ annotateKind: id, draft: [], textDraft: null })}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {textAt ? (
+        <form
+          className="row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const value = text.trim();
+            if (!value) return;
+            const s = useApp.getState();
+            addAnnotation({
+              id: newId(),
+              kind: "text",
+              page: s.page,
+              at: textAt,
+              text: value,
+            });
+            useApp.setState({ textDraft: null });
+          }}
+        >
+          <label htmlFor="ann-text">Texte</label>
+          <input
+            id="ann-text"
+            ref={input}
+            value={text}
+            maxLength={120}
+            onChange={(e) => setText(e.target.value)}
+          />
+          <button type="submit" className="primary">
+            Poser
+          </button>
+          <button type="button" onClick={() => useApp.setState({ textDraft: null })}>
+            Annuler
+          </button>
+        </form>
+      ) : (
+        <p className="muted small">
+          {kind === "text" &&
+            "Cliquez l'endroit du texte. Il ne sera pas compté dans les quantités."}
+          {kind === "arrow" && `Cliquez l'origine, puis la pointe (${draft}/2). Hors quantités.`}
+          {kind === "cloud" &&
+            `Cliquez le contour du nuage, puis Entrée ou double-clic (${draft} point(s)). Hors quantités.`}
+        </p>
+      )}
+      <button type="button" className="close" aria-label="Fermer" onClick={() => setTool("select")}>
+        ×
+      </button>
+    </section>
   );
 }

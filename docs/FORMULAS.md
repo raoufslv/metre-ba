@@ -158,3 +158,9 @@ nappe saisie (linéaire), emprise a × b (poteau).
 
 Une ouverture ou une trémie dont la cible est en mode détaillé ne retire pas d'acier
 automatiquement : le béton et le coffrage sont déduits, l'acier reste à ajuster dans les barres.
+
+## Phase 4 : échelle lue sur la page
+
+Un texte « 1/n » ou « 1:n » (de préférence précédé du mot « échelle ») propose
+`n × 0,0254 / 72` mètres par unité de page. Cela suppose qu'une unité de page vaut un point
+(1/72 pouce). La valeur n'est jamais appliquée sans confirmation.

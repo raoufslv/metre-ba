@@ -143,8 +143,8 @@ describe("préférences", () => {
       setItem: (k: string, v: string) => void mem.set(k, v),
     };
     expect(loadPrefs(storage)).toEqual(DEFAULT_PREFS);
-    savePrefs(storage, { theme: "dark", csvComma: false });
-    expect(loadPrefs(storage)).toEqual({ theme: "dark", csvComma: false });
+    savePrefs(storage, { theme: "dark", csvComma: false, snap: false });
+    expect(loadPrefs(storage)).toEqual({ theme: "dark", csvComma: false, snap: false });
     mem.set("metre-ba:prefs", "{oops");
     expect(loadPrefs(storage)).toEqual(DEFAULT_PREFS);
     mem.set("metre-ba:prefs", "[]");

@@ -167,3 +167,18 @@ tracés (plan révisé) » (mêmes numéros de page). Rien n'est effacé sans ce
   utile (recouvrement retiré dans les deux sens). La masse porte sur la surface brute.
 - D30 : une déduction vers une cible en mode détaillé ne retire pas d'acier (avertissement). Le béton
   et le coffrage restent déduits.
+
+## Phase 4
+
+- D31 : l'accrochage vise les extrémités des vecteurs PDF (coins de rectangles, fins de segments et
+  de courbes, pas les points de contrôle), plus les sommets déjà tracés. Maj (45°/90°) l'emporte.
+  Au plus 20 000 coins par page. Activé par défaut, réglage local.
+- D32 : l'échelle lue suppose 1 unité = 1 point. Elle est proposée, jamais appliquée seule.
+  Une image n'a pas de texte : rien n'est proposé.
+- D33 : masquer un élément ou filtrer le niveau ne change pas les totaux. Les étiquettes sont
+  coupées par défaut.
+- D34 : textes, flèches et nuages sont des annotations. Ils sont enregistrés, dessinés, imprimés
+  comme décompte, et exclus de tous les calculs.
+- D35 : une révision est une copie nommée du projet sans la liste des révisions (20 au plus,
+  la plus ancienne saute). La comparaison est l'écart de quantités, élément par élément et niveau
+  par niveau.

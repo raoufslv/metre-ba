@@ -110,7 +110,12 @@ describe("recouvrements de coffrage", () => {
     const on = summarize(
       proj({
         measurements: tWalls,
-        settings: { overlapDeduction: true, overlapTolerance: 0.1 },
+        settings: {
+          overlapDeduction: true,
+          overlapTolerance: 0.1,
+          hiddenElementIds: [],
+          showLabels: false,
+        },
       }),
     );
     expect(on.junctions).toHaveLength(1);

@@ -113,6 +113,8 @@ export function newProject(name = "Projet sans titre", elements?: Element[]): Pr
     scales: {},
     levelHeights: {},
     settings: { ...DEFAULT_SETTINGS },
+    annotations: [],
+    revisions: [],
   };
 }
 

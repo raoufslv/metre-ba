@@ -12,6 +12,7 @@ import { RebarEditor } from "./RebarForm";
 import {
   deleteMeasurement,
   duplicateActiveElement,
+  toggleHidden,
   removeElement,
   selectElement,
   updateElement,
@@ -262,6 +263,7 @@ function ElementsTab() {
   const elements = useApp((s) => s.project.elements);
   const measurements = useApp((s) => s.project.measurements);
   const activeId = useApp((s) => s.activeElementId);
+  const hidden = useApp((s) => s.project.settings.hiddenElementIds);
   const counts = useMemo(() => {
     const c = new Map<string, number>();
     for (const m of measurements) c.set(m.elementId, (c.get(m.elementId) ?? 0) + 1);
@@ -274,6 +276,20 @@ function ElementsTab() {
         const active = el.id === activeId;
         return (
           <li key={el.id} className={active ? "active" : undefined}>
+            <button
+              type="button"
+              className="icon"
+              aria-pressed={!hidden.includes(el.id)}
+              aria-label={
+                hidden.includes(el.id)
+                  ? `Afficher ${el.name} sur le plan`
+                  : `Masquer ${el.name} sur le plan`
+              }
+              title={hidden.includes(el.id) ? "Afficher" : "Masquer"}
+              onClick={() => toggleHidden(el.id)}
+            >
+              {hidden.includes(el.id) ? "○" : "●"}
+            </button>
             <button
               type="button"
               className="element-btn"
@@ -572,6 +588,7 @@ function MeasurementsTab() {
 }
 
 export default function Sidebar() {
+  // Calques : le bouton devant chaque élément masque son tracé sans changer les totaux.
   const [tab, setTab] = useState<"elements" | "measurements">("elements");
   const selectedId = useApp((s) => s.selectedId);
   useEffect(() => {

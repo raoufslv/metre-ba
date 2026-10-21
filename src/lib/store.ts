@@ -1,6 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import { COFFRAGES_BY_MODE } from "./quantities";
-import type { Coffrage, Element, Measurement, Mode, Project, Pt } from "./types";
+import type { Annotation, Coffrage, Element, Measurement, Mode, Project, Pt } from "./types";
 import { DEFAULT_SETTINGS, PROJECT_VERSION } from "./types";
 import type { Result } from "./calibration";
 
@@ -269,7 +269,15 @@ export function validateProject(raw: unknown): Result<Project> {
       isNum(rs.overlapTolerance) && rs.overlapTolerance >= 0
         ? rs.overlapTolerance
         : DEFAULT_SETTINGS.overlapTolerance,
+    hiddenElementIds: Array.isArray(rs.hiddenElementIds)
+      ? rs.hiddenElementIds.filter((id): id is string => typeof id === "string")
+      : [],
+    showLabels: typeof rs.showLabels === "boolean" ? rs.showLabels : DEFAULT_SETTINGS.showLabels,
   };
+  const annotations = checkAnnotations(raw.annotations);
+  if (!annotations.ok) return annotations;
+  const revisions = checkRevisions(raw.revisions);
+  if (!revisions.ok) return revisions;
   const scales: Record<number, number> = {};
   for (const [page, s] of Object.entries(raw.scales)) scales[Number(page)] = s as number;
   return {
@@ -284,8 +292,61 @@ export function validateProject(raw: unknown): Result<Project> {
       scales,
       levelHeights,
       settings,
+      annotations: annotations.value,
+      revisions: revisions.value,
     },
   };
+}
+
+function checkAnnotations(raw: unknown): Result<Annotation[]> {
+  if (raw === undefined) return { ok: true, value: [] };
+  if (!Array.isArray(raw)) return { ok: false, error: "Annotations invalides." };
+  for (const [i, a] of raw.entries()) {
+    const where = `Annotation n° ${i + 1}`;
+    if (!isObj(a) || typeof a.id !== "string" || !a.id) {
+      return { ok: false, error: `${where} : identifiant manquant.` };
+    }
+    if (!Number.isInteger(a.page) || (a.page as number) < 1) {
+      return { ok: false, error: `${where} : page invalide.` };
+    }
+    if (a.kind === "text") {
+      if (!isPt(a.at) || typeof a.text !== "string" || !a.text.trim()) {
+        return { ok: false, error: `${where} : texte invalide.` };
+      }
+    } else if (a.kind === "arrow") {
+      if (!isPt(a.from) || !isPt(a.to)) return { ok: false, error: `${where} : flèche invalide.` };
+    } else if (a.kind === "cloud") {
+      if (!Array.isArray(a.pts) || a.pts.length < 3 || !a.pts.every(isPt)) {
+        return { ok: false, error: `${where} : nuage invalide.` };
+      }
+    } else return { ok: false, error: `${where} : type inconnu.` };
+  }
+  return { ok: true, value: raw as Annotation[] };
+}
+
+function checkRevisions(raw: unknown): Result<Project["revisions"]> {
+  if (raw === undefined) return { ok: true, value: [] };
+  if (!Array.isArray(raw)) return { ok: false, error: "Révisions invalides." };
+  const out: Project["revisions"] = [];
+  for (const [i, r] of raw.entries()) {
+    const where = `Révision n° ${i + 1}`;
+    if (!isObj(r) || typeof r.id !== "string" || typeof r.name !== "string" || !r.name.trim()) {
+      return { ok: false, error: `${where} : nom manquant.` };
+    }
+    if (!isObj(r.snapshot)) return { ok: false, error: `${where} : contenu manquant.` };
+    const snap = { ...r.snapshot, revisions: undefined };
+    const v = validateProject(snap);
+    if (!v.ok) return { ok: false, error: `${where} : ${v.error}` };
+    const { revisions, ...snapshot } = v.value;
+    void revisions;
+    out.push({
+      id: r.id,
+      name: r.name.trim(),
+      savedAt: typeof r.savedAt === "string" ? r.savedAt : "",
+      snapshot,
+    });
+  }
+  return { ok: true, value: out };
 }
 
 // ---------- Bibliothèque d'éléments par défaut (localStorage) ----------
@@ -323,9 +384,11 @@ export function saveLibrary(
 export interface Prefs {
   theme: "auto" | "light" | "dark";
   csvComma: boolean;
+  /** Accrochage aux coins des vecteurs du PDF. */
+  snap: boolean;
 }
 
-export const DEFAULT_PREFS: Prefs = { theme: "auto", csvComma: true };
+export const DEFAULT_PREFS: Prefs = { theme: "auto", csvComma: true, snap: true };
 const PREFS_KEY = "metre-ba:prefs";
 
 export function loadPrefs(storage: Pick<Storage, "getItem"> | undefined): Prefs {
@@ -337,6 +400,7 @@ export function loadPrefs(storage: Pick<Storage, "getItem"> | undefined): Prefs 
     return {
       theme: p.theme === "light" || p.theme === "dark" ? p.theme : "auto",
       csvComma: typeof p.csvComma === "boolean" ? p.csvComma : DEFAULT_PREFS.csvComma,
+      snap: typeof p.snap === "boolean" ? p.snap : DEFAULT_PREFS.snap,
     };
   } catch {
     return { ...DEFAULT_PREFS };

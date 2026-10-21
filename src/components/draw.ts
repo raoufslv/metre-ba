@@ -1,7 +1,8 @@
 import { withAlpha } from "../lib/color";
 import { distanceToPolyline, pointInPolygon, polygonArea, polylineLength } from "../lib/geometry";
 import { formatQty } from "../lib/format";
-import type { Element, Measurement, Pt } from "../lib/types";
+import type { Annotation, Element, Measurement, Pt } from "../lib/types";
+import { labelAnchor } from "../lib/geometry";
 
 export const PROBE_COLOR = "#c2006b";
 
@@ -241,4 +242,104 @@ export function drawOpeningDraft(
     ctx.fillText(`${w.toFixed(2).replace(".", ",")} m`, pts[1][0] + 6 * px, pts[1][1] - 6 * px);
   }
   ctx.restore();
+}
+
+/** Étiquette de quantité, en coordonnées de page. */
+export function drawPageLabel(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  at: Pt,
+  px: number,
+  color: string,
+): void {
+  ctx.save();
+  ctx.font = `600 ${11 * px}px sans-serif`;
+  ctx.lineWidth = 3 * px;
+  ctx.strokeStyle = "#ffffff";
+  ctx.strokeText(text, at[0] + 6 * px, at[1] - 6 * px);
+  ctx.fillStyle = color;
+  ctx.fillText(text, at[0] + 6 * px, at[1] - 6 * px);
+  ctx.restore();
+}
+
+export function drawSnapMark(ctx: CanvasRenderingContext2D, p: Pt, px: number): void {
+  ctx.save();
+  ctx.strokeStyle = "#0b6b3a";
+  ctx.lineWidth = 1.5 * px;
+  ctx.strokeRect(p[0] - 5 * px, p[1] - 5 * px, 10 * px, 10 * px);
+  ctx.restore();
+}
+
+function cloudPath(ctx: CanvasRenderingContext2D, pts: readonly Pt[], px: number): void {
+  const r = 14 * px;
+  const ring = pts.length > 2 ? [...pts, pts[0]!] : pts;
+  ctx.beginPath();
+  for (let i = 1; i < ring.length; i++) {
+    const a = ring[i - 1]!;
+    const b = ring[i]!;
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const n = Math.max(1, Math.round(len / (r * 2.2)));
+    for (let k = 0; k < n; k++) {
+      const t0 = k / n;
+      const t1 = (k + 1) / n;
+      const x0 = a[0] + (b[0] - a[0]) * t0;
+      const y0 = a[1] + (b[1] - a[1]) * t0;
+      const x1 = a[0] + (b[0] - a[0]) * t1;
+      const y1 = a[1] + (b[1] - a[1]) * t1;
+      const dx = x1 - x0;
+      const dy = y1 - y0;
+      const L = Math.hypot(dx, dy) || 1;
+      if (i === 1 && k === 0) ctx.moveTo(x0, y0);
+      ctx.quadraticCurveTo(
+        (x0 + x1) / 2 - (dy / L) * r * 0.75,
+        (y0 + y1) / 2 + (dx / L) * r * 0.75,
+        x1,
+        y1,
+      );
+    }
+  }
+}
+
+/** Annotations (texte, flèche, nuage) : couche décorative, hors quantités. */
+export function drawAnnotations(
+  ctx: CanvasRenderingContext2D,
+  annotations: readonly Annotation[],
+  page: number,
+  px: number,
+  selectedId: string | null,
+): void {
+  ctx.save();
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  for (const a of annotations) {
+    if (a.page !== page) continue;
+    const selected = a.id === selectedId;
+    ctx.strokeStyle = selected ? "#9a3412" : "#7c2d12";
+    ctx.fillStyle = selected ? "#9a3412" : "#7c2d12";
+    ctx.lineWidth = (selected ? 2.4 : 1.6) * px;
+    if (a.kind === "text") {
+      drawPageLabel(ctx, a.text, a.at, px, ctx.fillStyle);
+    } else if (a.kind === "arrow") {
+      ctx.beginPath();
+      ctx.moveTo(a.from[0], a.from[1]);
+      ctx.lineTo(a.to[0], a.to[1]);
+      ctx.stroke();
+      const ang = Math.atan2(a.to[1] - a.from[1], a.to[0] - a.from[0]);
+      const s = 10 * px;
+      ctx.beginPath();
+      ctx.moveTo(a.to[0], a.to[1]);
+      ctx.lineTo(a.to[0] - s * Math.cos(ang - 0.4), a.to[1] - s * Math.sin(ang - 0.4));
+      ctx.lineTo(a.to[0] - s * Math.cos(ang + 0.4), a.to[1] - s * Math.sin(ang + 0.4));
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      cloudPath(ctx, a.pts, px);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+export function measurementLabelAnchor(pts: readonly Pt[]): Pt | null {
+  return labelAnchor(pts);
 }

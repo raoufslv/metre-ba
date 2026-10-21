@@ -111,19 +111,44 @@ export interface Measurement {
   meta: MeasurementMeta;
 }
 
-export const PROJECT_VERSION = 3;
+export const PROJECT_VERSION = 4;
 
 /** Hauteur sous plafond par défaut d'un niveau (m). */
 export const DEFAULT_LEVEL_HEIGHT = 2.7;
+
+/** Annotation de plan : n'entre jamais dans les quantités. */
+export type Annotation =
+  | { id: string; kind: "text"; page: number; at: Pt; text: string }
+  | { id: string; kind: "arrow"; page: number; from: Pt; to: Pt }
+  | { id: string; kind: "cloud"; page: number; pts: Pt[] };
+
+/** Version nommée du projet, sans la liste des révisions elle-même. */
+export interface Revision {
+  id: string;
+  name: string;
+  savedAt: string;
+  snapshot: ProjectSnapshot;
+}
+
+export type ProjectSnapshot = Omit<Project, "revisions">;
 
 export interface Settings {
   /** Déduction de recouvrement du coffrage aux jonctions (désactivée par défaut). */
   overlapDeduction: boolean;
   /** Distance (m) sous laquelle deux éléments sont considérés en contact. */
   overlapTolerance: number;
+  /** Éléments masqués à l'écran. Les quantités restent comptées. */
+  hiddenElementIds: string[];
+  /** Étiquettes de quantité dessinées sur le plan. */
+  showLabels: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { overlapDeduction: false, overlapTolerance: 0.1 };
+export const DEFAULT_SETTINGS: Settings = {
+  overlapDeduction: false,
+  overlapTolerance: 0.1,
+  hiddenElementIds: [],
+  showLabels: false,
+};
 
 export interface Project {
   version: number;
@@ -137,4 +162,8 @@ export interface Project {
   /** Hauteur sous plafond par niveau (m) ; DEFAULT_LEVEL_HEIGHT si absente. */
   levelHeights: Record<string, number>;
   settings: Settings;
+  /** Textes, flèches et nuages : exclus des quantités. */
+  annotations: Annotation[];
+  /** Versions nommées, de la plus ancienne à la plus récente. */
+  revisions: Revision[];
 }

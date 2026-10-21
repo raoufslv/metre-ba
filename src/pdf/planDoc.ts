@@ -1,6 +1,8 @@
 import * as pdfjs from "pdfjs-dist";
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import type { Pt } from "../lib/types";
+import { vectorCorners } from "../lib/vectors";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -30,6 +32,10 @@ export interface PlanDoc {
   pageSize(n: number): Promise<{ width: number; height: number }>;
   /** Rend la zone visible ; renvoie `false` si le rendu a été annulé par un rendu plus récent. */
   render(n: number, target: HTMLCanvasElement, v: RenderView): Promise<boolean>;
+  /** Coins des vecteurs, en unités de page (origine en haut à gauche). Vide pour une image. */
+  vectorCorners(n: number): Promise<Pt[]>;
+  /** Texte de la page, pour proposer une échelle lue. Vide pour une image. */
+  pageText(n: number): Promise<string>;
   destroy(): void;
 }
 
@@ -150,6 +156,20 @@ async function openPdf(data: ArrayBuffer): Promise<PlanDoc> {
       off.width = 0;
       return true;
     },
+    async vectorCorners(n) {
+      const page = await getPage(n);
+      const ops = await page.getOperatorList();
+      const vp = page.getViewport({ scale: 1 });
+      return vectorCorners(ops).map(([x, y]) => {
+        const p = vp.convertToViewportPoint(x, y);
+        return [p[0], p[1]] as Pt;
+      });
+    },
+    async pageText(n) {
+      const page = await getPage(n);
+      const content = await page.getTextContent();
+      return content.items.map((item) => ("str" in item ? item.str : "")).join(" ");
+    },
     destroy() {
       task?.cancel();
       cache.clear();
@@ -188,6 +208,12 @@ async function openImage(data: ArrayBuffer, mime: string): Promise<PlanDoc> {
       ctx.setTransform(s, 0, 0, s, v.x * v.dpr, v.y * v.dpr);
       ctx.drawImage(bitmap, 0, 0);
       return true;
+    },
+    async vectorCorners() {
+      return [];
+    },
+    async pageText() {
+      return "";
     },
     destroy() {
       bitmap.close();
