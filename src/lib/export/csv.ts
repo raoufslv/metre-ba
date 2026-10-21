@@ -16,6 +16,8 @@ export const CSV_HEADER = [
   "Acier HA kg",
   "Treillis soudé kg",
   "Acier total kg",
+  "Béton à commander m³",
+  "Acier à commander kg",
 ];
 
 function cell(v: string): string {
@@ -38,6 +40,8 @@ export function summaryToCsv(summary: Summary, { comma }: CsvOptions): string {
         n(r.ha, 0),
         n(r.ts, 0),
         n(r.steel, 0),
+        n(r.orderConcrete, 2),
+        n(r.orderSteel, 0),
       ].join(";"),
     );
   }
@@ -53,6 +57,8 @@ export function summaryToCsv(summary: Summary, { comma }: CsvOptions): string {
       n(t.ha, 0),
       n(t.ts, 0),
       n(t.steel, 0),
+      n(t.orderConcrete, 2),
+      n(t.orderSteel, 0),
     ].join(";"),
   );
   return lines.join("\r\n") + "\r\n";

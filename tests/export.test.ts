@@ -90,15 +90,15 @@ describe("CSV", () => {
     const csv = summaryToCsv(summarize(p), { comma: true });
     const lines = csv.trim().split("\r\n");
     expect(lines[0]).toBe(
-      "Élément;Niveau;Quantité;Unité;Béton m³;Coffrage m²;Acier HA kg;Treillis soudé kg;Acier total kg",
+      "Élément;Niveau;Quantité;Unité;Béton m³;Coffrage m²;Acier HA kg;Treillis soudé kg;Acier total kg;Béton à commander m³;Acier à commander kg",
     );
-    expect(lines[1]).toBe('"Voile ""A""; ext";RDC;10,00;m;5,40;54,00;432;0;432');
-    expect(lines.at(-1)).toBe("Total;;;;8,89;76,40;757;0;757");
+    expect(lines[1]).toBe('"Voile ""A""; ext";RDC;10,00;m;5,40;54,00;432;0;432;5,40;432');
+    expect(lines.at(-1)).toBe("Total;;;;8,89;76,40;757;0;757;8,89;757");
   });
 
   it("décimale point en option", () => {
     const csv = summaryToCsv(summarize(acceptanceProject()), { comma: false });
-    expect(csv).toContain("Total;;;;8.89;76.40;757;0;757");
+    expect(csv).toContain("Total;;;;8.89;76.40;757;0;757;8.89;757");
   });
 });
 

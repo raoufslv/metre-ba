@@ -24,9 +24,22 @@ export interface Element {
   ratioTS: number;
   /** ouv/tremie : élément dont on déduit. */
   targetId?: string;
+  /** ligne/point : la hauteur suit la hauteur sous plafond du niveau du tracé. */
+  storyHeight?: boolean;
+  /** Majoration (%) du béton à commander. Jamais appliquée à la valeur mesurée. */
+  lossConcrete?: number;
+  /** Majoration (%) de l'acier à commander. */
+  lossSteel?: number;
 }
 
 export type Overrides = Partial<Pick<Element, "a" | "b" | "h" | "ratioHA" | "ratioTS">>;
+
+/** Précisions d'une ouverture rectangulaire (outil Ouverture). */
+export interface OpeningInfo {
+  kind: "porte" | "fenetre";
+  /** Hauteur d'allège (m), fenêtre seulement. */
+  sill: number;
+}
 
 export interface MeasurementMeta {
   /** Mètres par unité de page utilisés au moment du tracé. */
@@ -48,10 +61,23 @@ export interface Measurement {
   h?: number;
   targetId?: string;
   overrides?: Overrides;
+  opening?: OpeningInfo;
   meta: MeasurementMeta;
 }
 
-export const PROJECT_VERSION = 1;
+export const PROJECT_VERSION = 2;
+
+/** Hauteur sous plafond par défaut d'un niveau (m). */
+export const DEFAULT_LEVEL_HEIGHT = 2.7;
+
+export interface Settings {
+  /** Déduction de recouvrement du coffrage aux jonctions (désactivée par défaut). */
+  overlapDeduction: boolean;
+  /** Distance (m) sous laquelle deux éléments sont considérés en contact. */
+  overlapTolerance: number;
+}
+
+export const DEFAULT_SETTINGS: Settings = { overlapDeduction: false, overlapTolerance: 0.1 };
 
 export interface Project {
   version: number;
@@ -62,4 +88,7 @@ export interface Project {
   measurements: Measurement[];
   /** Mètres par unité de page, indexé par numéro de page. */
   scales: Record<number, number>;
+  /** Hauteur sous plafond par niveau (m) ; DEFAULT_LEVEL_HEIGHT si absente. */
+  levelHeights: Record<string, number>;
+  settings: Settings;
 }

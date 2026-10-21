@@ -1,7 +1,7 @@
 import type { Worksheet } from "exceljs";
 import { COFFRAGE_LABELS, MODE_LABELS } from "../catalog";
 import { summarize } from "../quantities";
-import type { Project } from "../types";
+import { DEFAULT_LEVEL_HEIGHT, type Project } from "../types";
 import { detailRows, DISCLAIMER } from "./report";
 
 const F2 = "#,##0.00";
@@ -40,8 +40,10 @@ export async function buildWorkbook(project: Project, now = new Date()): Promise
       "Acier HA kg",
       "Treillis soudé kg",
       "Acier total kg",
+      "Béton à commander m³",
+      "Acier à commander kg",
     ],
-    [34, 14, 12, 8, 12, 14, 14, 18, 16],
+    [34, 14, 12, 8, 12, 14, 14, 18, 16, 20, 20],
   );
   for (const r of summary.rows) {
     recap.addRow([
@@ -54,12 +56,26 @@ export async function buildWorkbook(project: Project, now = new Date()): Promise
       r.ha,
       r.ts,
       r.steel,
+      r.orderConcrete,
+      r.orderSteel,
     ]);
   }
   const t = summary.totals;
-  const total = recap.addRow(["Total", "", null, "", t.concrete, t.formwork, t.ha, t.ts, t.steel]);
+  const total = recap.addRow([
+    "Total",
+    "",
+    null,
+    "",
+    t.concrete,
+    t.formwork,
+    t.ha,
+    t.ts,
+    t.steel,
+    t.orderConcrete,
+    t.orderSteel,
+  ]);
   total.font = { bold: true };
-  formats(recap, { 3: F2, 5: F2, 6: F2, 7: F0, 8: F0, 9: F0 });
+  formats(recap, { 3: F2, 5: F2, 6: F2, 7: F0, 8: F0, 9: F0, 10: F2, 11: F0 });
   recap.addRow([]);
   recap.addRow([DISCLAIMER]).font = { italic: true };
   if (summary.pending > 0) {
@@ -124,8 +140,11 @@ export async function buildWorkbook(project: Project, now = new Date()): Promise
       "TS kg/m³",
       "Déduit de",
       "Couleur",
+      "Hauteur = niveau",
+      "Perte béton %",
+      "Perte acier %",
     ],
-    [34, 22, 9, 9, 9, 26, 10, 10, 26, 10],
+    [34, 22, 9, 9, 9, 26, 10, 10, 26, 10, 16, 14, 14],
   );
   for (const e of project.elements) {
     els.addRow([
@@ -139,6 +158,9 @@ export async function buildWorkbook(project: Project, now = new Date()): Promise
       e.ratioTS,
       e.targetId ? (project.elements.find((x) => x.id === e.targetId)?.name ?? e.targetId) : "",
       e.color,
+      e.storyHeight ? "oui" : "non",
+      e.lossConcrete ?? 0,
+      e.lossSteel ?? 0,
     ]);
   }
   els.addRow([]);
@@ -174,6 +196,18 @@ export async function buildWorkbook(project: Project, now = new Date()): Promise
     ]);
   }
   audit.getColumn(4).numFmt = "0.000000";
+  audit.addRow([]);
+  audit.addRow(["Hauteurs sous plafond par niveau"]).font = { bold: true };
+  for (const lv of project.levels) {
+    audit.addRow(["", lv, project.levelHeights[lv] ?? DEFAULT_LEVEL_HEIGHT]);
+  }
+  audit.addRow([
+    "",
+    "Déduction de recouvrement du coffrage",
+    project.settings.overlapDeduction
+      ? `activée (tolérance ${project.settings.overlapTolerance} m, ${summary.junctions.length} jonction(s))`
+      : "désactivée",
+  ]);
   audit.addRow([]);
   audit.addRow(["Échelles par page"]).font = { bold: true };
   for (const [page, s] of Object.entries(project.scales)) {

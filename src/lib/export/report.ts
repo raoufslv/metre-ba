@@ -37,7 +37,7 @@ export function detailRows(project: Project): DetailRow[] {
     id ? (project.elements.find((e) => e.id === id)?.name ?? `(${id})`) : "";
   return project.measurements.map((m) => {
     const el = project.elements.find((e) => e.id === m.elementId);
-    const q = computeMeasurement(m, project.elements);
+    const q = computeMeasurement(m, project.elements, { levelHeights: project.levelHeights });
     const counted = countsInTotals(m);
     return {
       id: m.id,

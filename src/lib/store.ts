@@ -1,7 +1,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import { COFFRAGES_BY_MODE } from "./quantities";
 import type { Coffrage, Element, Measurement, Mode, Project, Pt } from "./types";
-import { PROJECT_VERSION } from "./types";
+import { DEFAULT_SETTINGS, PROJECT_VERSION } from "./types";
 import type { Result } from "./calibration";
 
 export interface StoredPlan {
@@ -124,7 +124,28 @@ function checkElement(e: unknown, i: number): string | null {
   if (e.targetId !== undefined && typeof e.targetId !== "string") {
     return `${where} : cible invalide.`;
   }
+  if (e.storyHeight !== undefined && typeof e.storyHeight !== "boolean") {
+    return `${where} : « hauteur du niveau » invalide.`;
+  }
+  for (const k of ["lossConcrete", "lossSteel"] as const) {
+    if (e[k] !== undefined && !isNonNeg(e[k])) return `${where} : perte invalide.`;
+  }
   return null;
+}
+
+/** Valide une liste d'éléments (projet ou gabarit de catalogue). */
+export function validateElements(raw: unknown): Result<Element[]> {
+  if (!Array.isArray(raw)) return { ok: false, error: "Liste d'éléments manquante." };
+  for (const [i, e] of raw.entries()) {
+    const err = checkElement(e, i);
+    if (err) return { ok: false, error: err };
+  }
+  const ids = new Set<string>();
+  for (const e of raw as Element[]) {
+    if (ids.has(e.id)) return { ok: false, error: `Identifiant d'élément en double : ${e.id}.` };
+    ids.add(e.id);
+  }
+  return { ok: true, value: raw as Element[] };
 }
 
 function checkMeasurement(m: unknown, i: number): string | null {
@@ -143,6 +164,12 @@ function checkMeasurement(m: unknown, i: number): string | null {
     if (!isObj(m.overrides)) return `${where} : surcharges invalides.`;
     for (const v of Object.values(m.overrides)) {
       if (!isNonNeg(v)) return `${where} : surcharge invalide.`;
+    }
+  }
+  if (m.opening !== undefined) {
+    const o = m.opening;
+    if (!isObj(o) || (o.kind !== "porte" && o.kind !== "fenetre") || !isNonNeg(o.sill)) {
+      return `${where} : ouverture invalide.`;
     }
   }
   const meta = m.meta;
@@ -173,16 +200,34 @@ export function validateProject(raw: unknown): Result<Project> {
       return { ok: false, error: `Échelle invalide pour la page ${page}.` };
     }
   }
-  for (const [i, e] of raw.elements.entries()) {
-    const err = checkElement(e, i);
-    if (err) return { ok: false, error: err };
-  }
+  const els = validateElements(raw.elements);
+  if (!els.ok) return els;
   for (const [i, m] of raw.measurements.entries()) {
     const err = checkMeasurement(m, i);
     if (err) return { ok: false, error: err };
   }
   const levels = raw.levels as string[];
   const level = typeof raw.level === "string" && levels.includes(raw.level) ? raw.level : levels[0];
+  const levelHeights: Record<string, number> = {};
+  if (raw.levelHeights !== undefined) {
+    if (!isObj(raw.levelHeights)) return { ok: false, error: "Hauteurs de niveau invalides." };
+    for (const [lv, h] of Object.entries(raw.levelHeights)) {
+      if (!isNum(h) || h <= 0)
+        return { ok: false, error: `Hauteur invalide pour le niveau ${lv}.` };
+      levelHeights[lv] = h;
+    }
+  }
+  const rs = isObj(raw.settings) ? raw.settings : {};
+  const settings = {
+    overlapDeduction:
+      typeof rs.overlapDeduction === "boolean"
+        ? rs.overlapDeduction
+        : DEFAULT_SETTINGS.overlapDeduction,
+    overlapTolerance:
+      isNum(rs.overlapTolerance) && rs.overlapTolerance >= 0
+        ? rs.overlapTolerance
+        : DEFAULT_SETTINGS.overlapTolerance,
+  };
   const scales: Record<number, number> = {};
   for (const [page, s] of Object.entries(raw.scales)) scales[Number(page)] = s as number;
   return {
@@ -195,8 +240,40 @@ export function validateProject(raw: unknown): Result<Project> {
       level: level ?? "RDC",
       measurements: raw.measurements as Measurement[],
       scales,
+      levelHeights,
+      settings,
     },
   };
+}
+
+// ---------- Bibliothèque d'éléments par défaut (localStorage) ----------
+
+const LIBRARY_KEY = "metre-ba:library";
+
+/** Catalogue personnalisé servant de base aux nouveaux projets, ou `null` (catalogue d'usine). */
+export function loadLibrary(storage: Pick<Storage, "getItem"> | undefined): Element[] | null {
+  try {
+    const raw = storage?.getItem(LIBRARY_KEY);
+    if (!raw) return null;
+    const r = validateElements(JSON.parse(raw));
+    return r.ok && r.value.length > 0 ? r.value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Enregistre la bibliothèque ; `null` revient au catalogue d'usine. */
+export function saveLibrary(
+  storage: Pick<Storage, "setItem" | "removeItem"> | undefined,
+  elements: Element[] | null,
+): boolean {
+  try {
+    if (elements) storage?.setItem(LIBRARY_KEY, JSON.stringify(elements));
+    else storage?.removeItem(LIBRARY_KEY);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ---------- Préférences (localStorage) ----------

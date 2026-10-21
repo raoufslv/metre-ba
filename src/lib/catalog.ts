@@ -1,5 +1,5 @@
 import type { Coffrage, Element, Mode, Project } from "./types";
-import { PROJECT_VERSION } from "./types";
+import { DEFAULT_SETTINGS, PROJECT_VERSION } from "./types";
 
 /**
  * Palette lisible sur plan blanc : chaque couleur a un contraste ≥ 3:1 sur blanc
@@ -79,6 +79,9 @@ const ROWS: Row[] = [
   ["tremies", "Trémies", "tremie", 0, 0, 0, "rv", 0, 0, "planchers"],
 ];
 
+/** Éléments dont la hauteur suit la hauteur sous plafond du niveau (hauteur « étage »). */
+const STORY_HEIGHT_IDS = new Set(["voiles-ext", "voiles-int", "voiles-mit", "poteaux"]);
+
 export function defaultElements(): Element[] {
   return ROWS.map(([id, name, mode, a, b, h, cof, ratioHA, ratioTS, targetId], i) => ({
     id,
@@ -92,20 +95,24 @@ export function defaultElements(): Element[] {
     ratioHA,
     ratioTS,
     ...(targetId ? { targetId } : {}),
+    ...(STORY_HEIGHT_IDS.has(id) ? { storyHeight: true } : {}),
   }));
 }
 
 export const DEFAULT_LEVELS = ["Fondations", "RDC", "R+1"];
 
-export function newProject(name = "Projet sans titre"): Project {
+/** Nouveau projet ; `elements` permet de partir d'une bibliothèque personnalisée. */
+export function newProject(name = "Projet sans titre", elements?: Element[]): Project {
   return {
     version: PROJECT_VERSION,
     name,
-    elements: defaultElements(),
+    elements: elements ? structuredClone(elements) : defaultElements(),
     levels: [...DEFAULT_LEVELS],
     level: "RDC",
     measurements: [],
     scales: {},
+    levelHeights: {},
+    settings: { ...DEFAULT_SETTINGS },
   };
 }
 

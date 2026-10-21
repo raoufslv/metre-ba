@@ -1,15 +1,12 @@
+import { elementHeight, resolveDims, type CalcOptions, type Dims } from "./dims";
 import { polygonArea, polygonPerimeter, polylineLength } from "./geometry";
 import type { Coffrage, Element, Measurement, Mode, Project } from "./types";
+import { findJunctions } from "./junctions";
+
+export { elementHeight, levelHeight, resolveDims } from "./dims";
+export type { CalcOptions, Dims } from "./dims";
 
 export type Unit = "m" | "m²" | "u";
-
-export interface Dims {
-  a: number;
-  b: number;
-  h: number;
-  ratioHA: number;
-  ratioTS: number;
-}
 
 export interface MeasurementQuantities {
   /** Longueur (m), surface (m²) ou nombre d'unités, toujours positive. */
@@ -55,18 +52,6 @@ export function targetModeFor(mode: Mode): Mode | null {
   return null;
 }
 
-/** Dimensions effectives : surcharges du tracé > hauteur copiée au tracé > élément. */
-export function resolveDims(el: Element, m: Measurement): Dims {
-  const o = m.overrides ?? {};
-  return {
-    a: o.a ?? el.a,
-    b: o.b ?? el.b,
-    h: o.h ?? m.h ?? el.h,
-    ratioHA: o.ratioHA ?? el.ratioHA,
-    ratioTS: o.ratioTS ?? el.ratioTS,
-  };
-}
-
 function empty(unit: Unit, warnings: string[] = []): MeasurementQuantities {
   return { quantity: 0, unit, concrete: 0, formwork: 0, ha: 0, ts: 0, steel: 0, warnings };
 }
@@ -95,6 +80,7 @@ function wallFaces(cof: Coffrage): number {
 export function computeMeasurement(
   m: Measurement,
   elements: readonly Element[],
+  opts?: CalcOptions,
 ): MeasurementQuantities {
   const el = elements.find((e) => e.id === m.elementId);
   if (!el) return empty("u", [`Élément introuvable (${m.elementId}).`]);
@@ -102,7 +88,7 @@ export function computeMeasurement(
   const k = m.meta.scale;
   if (!(k > 0)) return empty(unit, ["Tracé sans échelle valide : quantités nulles."]);
 
-  const d = resolveDims(el, m);
+  const d = resolveDims(el, m, opts);
   const warnings: string[] = [];
 
   switch (el.mode) {
@@ -135,7 +121,7 @@ export function computeMeasurement(
     }
     case "ouv":
     case "tremie":
-      return computeDeduction(el, m, elements, d, k);
+      return computeDeduction(el, m, elements, d, k, opts);
   }
 }
 
@@ -145,6 +131,7 @@ function computeDeduction(
   elements: readonly Element[],
   d: Dims,
   k: number,
+  opts?: CalcOptions,
 ): MeasurementQuantities {
   const unit = UNIT_BY_MODE[el.mode];
   const targetId = m.targetId ?? el.targetId;
@@ -164,8 +151,15 @@ function computeDeduction(
     const W = polylineLength(m.pts) * k;
     const concrete = -W * d.h * e;
     let formwork = -W * d.h * wallFaces(target.cof);
-    if (el.cof === "t1") formwork += (2 * d.h + W) * e;
-    else if (el.cof !== "t0") warnings.push(badCoffrage(el));
+    if (el.cof === "t1") {
+      formwork += (2 * d.h + W) * e;
+      // Une fenêtre a aussi un tableau d'appui (bas de la baie).
+      if (m.opening?.kind === "fenetre") formwork += W * e;
+    } else if (el.cof !== "t0") warnings.push(badCoffrage(el));
+    const wallH = elementHeight(target, m.level, opts);
+    if (m.opening?.kind === "fenetre" && wallH > 0 && m.opening.sill + d.h > wallH + 1e-9) {
+      warnings.push("Allège + hauteur de la fenêtre dépassent la hauteur du voile.");
+    }
     return withSteel(
       { quantity: W, unit, concrete, formwork, warnings },
       target.ratioHA,
@@ -202,10 +196,17 @@ export interface SummaryRow {
   count: number;
   quantity: number;
   concrete: number;
+  /** Coffrage net, recouvrements de jonctions déduits si l'option est active. */
   formwork: number;
+  /** Part déjà déduite de `formwork` pour recouvrement (≤ 0). */
+  overlap: number;
   ha: number;
   ts: number;
   steel: number;
+  /** Béton à commander (m³) : mesuré × (1 + perte). */
+  orderConcrete: number;
+  /** Acier à commander (kg) : mesuré × (1 + perte). */
+  orderSteel: number;
   warnings: string[];
 }
 
@@ -215,6 +216,8 @@ export interface Totals {
   ha: number;
   ts: number;
   steel: number;
+  orderConcrete: number;
+  orderSteel: number;
 }
 
 export interface Summary {
@@ -222,17 +225,29 @@ export interface Summary {
   totals: Totals;
   /** Tracés exclus des totaux (propositions non relues). */
   pending: number;
+  /** Jonctions retenues pour la déduction de recouvrement (option active). */
+  junctions: import("./junctions").Junction[];
+}
+
+export type SummaryInput = Pick<Project, "elements" | "levels" | "measurements"> &
+  Partial<Pick<Project, "levelHeights" | "settings">>;
+
+/** Élément dont dépend la matière d'un tracé : la cible pour une déduction. */
+function materialElement(el: Element | undefined, m: Measurement, all: readonly Element[]) {
+  if (el && isDeduction(el.mode)) {
+    return all.find((e) => e.id === (m.targetId ?? el.targetId)) ?? el;
+  }
+  return el;
 }
 
 /** Récapitulatif groupé par élément puis par niveau, dans l'ordre du catalogue et des niveaux. */
 export function summarize(
-  project: Pick<Project, "elements" | "levels" | "measurements">,
+  project: SummaryInput,
   filter: (m: Measurement) => boolean = () => true,
 ): Summary {
-  const rows = new Map<string, SummaryRow>();
-  const totals: Totals = { concrete: 0, formwork: 0, ha: 0, ts: 0, steel: 0 };
+  const opts: CalcOptions = { levelHeights: project.levelHeights };
+  const counted: { m: Measurement; el: Element | undefined; q: MeasurementQuantities }[] = [];
   let pending = 0;
-
   for (const m of project.measurements) {
     if (!filter(m)) continue;
     if (!countsInTotals(m)) {
@@ -240,7 +255,38 @@ export function summarize(
       continue;
     }
     const el = project.elements.find((e) => e.id === m.elementId);
-    const q = computeMeasurement(m, project.elements);
+    counted.push({ m, el, q: computeMeasurement(m, project.elements, opts) });
+  }
+
+  // Recouvrements de coffrage aux jonctions (option, désactivée par défaut).
+  const overlapById = new Map<string, number>();
+  let junctions: Summary["junctions"] = [];
+  if (project.settings?.overlapDeduction) {
+    junctions = findJunctions(
+      counted.map((c) => c.m),
+      project.elements,
+      { tolerance: project.settings.overlapTolerance, ...opts },
+    );
+    const sums = new Map<string, number>();
+    for (const j of junctions) sums.set(j.receiverId, (sums.get(j.receiverId) ?? 0) + j.area);
+    for (const c of counted) {
+      const s = sums.get(c.m.id);
+      // On ne déduit jamais plus que le coffrage brut du tracé.
+      if (s) overlapById.set(c.m.id, -Math.min(s, Math.max(0, c.q.formwork)));
+    }
+  }
+
+  const rows = new Map<string, SummaryRow>();
+  const totals: Totals = {
+    concrete: 0,
+    formwork: 0,
+    ha: 0,
+    ts: 0,
+    steel: 0,
+    orderConcrete: 0,
+    orderSteel: 0,
+  };
+  for (const { m, el, q } of counted) {
     const key = `${m.elementId}\u0000${m.level}`;
     let row = rows.get(key);
     if (!row) {
@@ -255,26 +301,38 @@ export function summarize(
         quantity: 0,
         concrete: 0,
         formwork: 0,
+        overlap: 0,
         ha: 0,
         ts: 0,
         steel: 0,
+        orderConcrete: 0,
+        orderSteel: 0,
         warnings: [],
       };
       rows.set(key, row);
     }
+    const mat = materialElement(el, m, project.elements);
+    const fc = 1 + (mat?.lossConcrete ?? 0) / 100;
+    const fs = 1 + (mat?.lossSteel ?? 0) / 100;
+    const ov = overlapById.get(m.id) ?? 0;
     row.count++;
     row.quantity += q.quantity;
     row.concrete += q.concrete;
-    row.formwork += q.formwork;
+    row.formwork += q.formwork + ov;
+    row.overlap += ov;
     row.ha += q.ha;
     row.ts += q.ts;
     row.steel += q.steel;
+    row.orderConcrete += q.concrete * fc;
+    row.orderSteel += q.steel * fs;
     for (const w of q.warnings) if (!row.warnings.includes(w)) row.warnings.push(w);
     totals.concrete += q.concrete;
-    totals.formwork += q.formwork;
+    totals.formwork += q.formwork + ov;
     totals.ha += q.ha;
     totals.ts += q.ts;
     totals.steel += q.steel;
+    totals.orderConcrete += q.concrete * fc;
+    totals.orderSteel += q.steel * fs;
   }
 
   const elOrder = new Map(project.elements.map((e, i) => [e.id, i]));
@@ -285,5 +343,5 @@ export function summarize(
       (elOrder.get(x.elementId) ?? last) - (elOrder.get(y.elementId) ?? last) ||
       (lvOrder.get(x.level) ?? last) - (lvOrder.get(y.level) ?? last),
   );
-  return { rows: sorted, totals, pending };
+  return { rows: sorted, totals, pending, junctions };
 }
