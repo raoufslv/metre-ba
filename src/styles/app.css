@@ -430,6 +430,13 @@ input[type="color"] {
   margin-right: 0;
 }
 
+.element-btn .chevron {
+  width: 1em;
+  flex: none;
+  text-align: center;
+  color: var(--muted);
+}
+
 .badge {
   min-width: 24px;
   text-align: center;
