@@ -1,8 +1,8 @@
 import { useEffect, useRef, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import { hitAnnotation } from "../lib/annotations";
 import { isCalibrated } from "../lib/calibration";
-import { lockAngle, nearestVertex, snapToPoints } from "../lib/geometry";
-import { computeMeasurement } from "../lib/quantities";
+import { distance, lockAngle, nearestVertex, snapToPoints } from "../lib/geometry";
+import { computeMeasurement, resolveDims } from "../lib/quantities";
 import { detectScale, ratioToScale } from "../lib/scaleText";
 import { formatQty } from "../lib/format";
 import type { Measurement, Pt } from "../lib/types";
@@ -18,7 +18,9 @@ import {
   notify,
   pageScale,
   panBy,
+  placeOpening,
   setPageScale,
+  updateMeasurement,
   useApp,
   zoomAt,
   type View,
@@ -27,13 +29,13 @@ import {
   drawAnnotations,
   drawDraft,
   drawLabel,
-  drawOpeningDraft,
   drawPageLabel,
   drawProbe,
   drawReticle,
   drawShape,
   drawSnapMark,
   hitTest,
+  lineThicknessGrip as gripFor,
   liveLabel,
   measurementLabelAnchor,
 } from "./draw";
@@ -54,7 +56,15 @@ function visibleOnPage(s: ReturnType<typeof useApp.getState>): Measurement[] {
 type Drag =
   | { kind: "pan"; lastX: number; lastY: number }
   | { kind: "vertex"; id: string; index: number; started: boolean }
-  | { kind: "opening"; p1: Pt }
+  | {
+      kind: "thickness";
+      id: string;
+      mid: Pt;
+      nx: number;
+      ny: number;
+      startSigned: number;
+      startMeters: number;
+    }
   | { kind: "press"; sx: number; sy: number };
 
 export default function PlanCanvas() {
@@ -105,9 +115,11 @@ export default function PlanCanvas() {
     for (const m of visibleOnPage(s)) {
       const el = s.project.elements.find((e) => e.id === m.elementId);
       if (!el) continue;
+      const dims = resolveDims(el, m, { levelHeights: s.project.levelHeights });
       drawShape(ctx, el, m.pts, {
         px,
         scale: m.meta.scale,
+        thickness: dims.a,
         hover: s.hoverId === m.id,
         selected: s.selectedId === m.id,
       });
@@ -126,13 +138,12 @@ export default function PlanCanvas() {
     const el = activeElement(s);
     let label: string | null = null;
     if (s.tool === "draw" && el && s.draft.length > 0) {
-      drawDraft(ctx, el, s.draft, mouse.current, px);
+      drawDraft(ctx, el, s.draft, mouse.current, px, scale);
       label = liveLabel(el, mouse.current ? [...s.draft, mouse.current] : s.draft, scale);
     }
     if ((s.tool === "calibrate" || s.tool === "verify") && s.probe.length > 0) {
       drawProbe(ctx, s.probe, s.probe.length < 2 ? mouse.current : null, px);
     }
-    if (s.openingDraft) drawOpeningDraft(ctx, s.openingDraft, px, scale);
     if (snapped.current) drawSnapMark(ctx, snapped.current, px);
     if (reticle.current) drawReticle(ctx, reticle.current, px);
 
@@ -288,11 +299,9 @@ export default function PlanCanvas() {
     const anchor =
       s.tool === "draw" || (s.tool === "annotate" && s.annotateKind !== "text")
         ? s.draft[s.draft.length - 1]
-        : s.tool === "opening" && s.openingDraft
-          ? s.openingDraft[0]
-          : s.probe.length === 1
-            ? s.probe[0]
-            : undefined;
+        : s.probe.length === 1
+          ? s.probe[0]
+          : undefined;
     if (shift && anchor) {
       snapped.current = null;
       return lockAngle(anchor, p, 45);
@@ -313,10 +322,13 @@ export default function PlanCanvas() {
       const el = activeElement(s);
       if (!el) return;
       if (count >= 2) {
-        if (el.mode !== "point") finishDraft();
+        if (el.mode !== "point" && el.mode !== "ouv") finishDraft();
         return;
       }
       addDraftPoint(p);
+    } else if (s.tool === "opening") {
+      if (count >= 2) return;
+      placeOpening(p);
     } else if (s.tool === "annotate") {
       if (s.annotateKind === "text") {
         useApp.setState({ textDraft: p, draft: [] });
@@ -364,20 +376,29 @@ export default function PlanCanvas() {
     }
     if (e.button !== 0) return;
     const s = useApp.getState();
-    if (s.tool === "opening") {
-      if (pageScale(s) === null) {
-        notify("error", "Page non étalonnée : étalonnez l'échelle avant de tracer une ouverture.");
-        return;
-      }
-      const p = aimed(toPage(sx, sy), e.shiftKey);
-      drag.current = { kind: "opening", p1: p };
-      useApp.setState({ openingDraft: [p, p] });
-      return;
-    }
+    const pagePt = toPage(sx, sy);
     if (s.tool === "select" && s.selectedId) {
       const m = s.project.measurements.find((x) => x.id === s.selectedId);
+      const el = m && s.project.elements.find((e) => e.id === m.elementId);
+      if (m && el?.mode === "ligne") {
+        const dims = resolveDims(el, m, { levelHeights: s.project.levelHeights });
+        const grip = gripFor(m.pts, dims.a, m.meta.scale, 1 / s.view.zoom);
+        if (grip && distance(pagePt, grip.at) <= 14 / s.view.zoom) {
+          drag.current = {
+            kind: "thickness",
+            id: m.id,
+            mid: grip.mid,
+            nx: grip.nx,
+            ny: grip.ny,
+            startSigned:
+              (grip.at[0] - grip.mid[0]) * grip.nx + (grip.at[1] - grip.mid[1]) * grip.ny,
+            startMeters: dims.a,
+          };
+          return;
+        }
+      }
       if (m) {
-        const idx = nearestVertex(m.pts, toPage(sx, sy), 8 / s.view.zoom);
+        const idx = nearestVertex(m.pts, pagePt, 8 / s.view.zoom);
         if (idx >= 0) {
           drag.current = { kind: "vertex", id: m.id, index: idx, started: false };
           return;
@@ -400,8 +421,19 @@ export default function PlanCanvas() {
       d.lastY = sy;
       return;
     }
-    if (d?.kind === "opening") {
-      useApp.setState({ openingDraft: [d.p1, p] });
+    if (d?.kind === "thickness") {
+      const s = useApp.getState();
+      const m = s.project.measurements.find((x) => x.id === d.id);
+      if (m && m.meta.scale > 0) {
+        const signed = (p[0] - d.mid[0]) * d.nx + (p[1] - d.mid[1]) * d.ny;
+        const meters = Math.min(
+          3,
+          Math.max(0.02, d.startMeters + (signed - d.startSigned) * 2 * m.meta.scale),
+        );
+        const thickness = Math.round(meters * 1000) / 1000;
+        const next = { ...m.overrides, a: thickness };
+        updateMeasurement(m.id, { overrides: next }, `m:${m.id}:thick`);
+      }
       suppressClick.current = true;
       return;
     }
@@ -436,14 +468,8 @@ export default function PlanCanvas() {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
-    if (d?.kind === "pan" || d?.kind === "vertex") suppressClick.current = true;
-    if (d?.kind === "opening") {
+    if (d?.kind === "pan" || d?.kind === "vertex" || d?.kind === "thickness") {
       suppressClick.current = true;
-      const od = useApp.getState().openingDraft;
-      const zoom = useApp.getState().view.zoom;
-      if (od && Math.hypot(od[1][0] - od[0][0], od[1][1] - od[0][1]) * zoom < 6) {
-        useApp.setState({ openingDraft: null });
-      }
     }
   }
 

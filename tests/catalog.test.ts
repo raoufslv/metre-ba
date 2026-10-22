@@ -86,7 +86,7 @@ describe("catalogue par défaut", () => {
       ["a", "h"],
       ["a"],
       ["a", "b", "h"],
-      ["h"],
+      ["a", "h"],
       [],
     ]);
     expect(modes.map(hasOwnRatios)).toEqual([true, true, true, false, false]);

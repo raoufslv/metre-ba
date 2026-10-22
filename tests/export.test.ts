@@ -90,15 +90,17 @@ describe("CSV", () => {
     const csv = summaryToCsv(summarize(p), { comma: true });
     const lines = csv.trim().split("\r\n");
     expect(lines[0]).toBe(
-      "Élément;Niveau;Quantité;Unité;Béton m³;Coffrage m²;Acier HA kg;Treillis soudé kg;Acier total kg;Béton à commander m³;Acier à commander kg",
+      "Élément;Niveau;Quantité;Unité;Épaisseur m;Côté b m;Hauteur m;Béton m³;Coffrage m²;Acier HA kg;Treillis soudé kg;Acier total kg;Béton à commander m³;Acier à commander kg",
     );
-    expect(lines[1]).toBe('"Voile ""A""; ext";RDC;10,00;m;5,40;54,00;432;0;432;5,40;432');
-    expect(lines.at(-1)).toBe("Total;;;;8,89;76,40;757;0;757;8,89;757");
+    expect(lines[1]).toBe(
+      '"Voile ""A""; ext";RDC;10,00;m;0,20;0,00;2,70;5,40;54,00;432;0;432;5,40;432',
+    );
+    expect(lines.at(-1)).toBe("Total;;;;;;;8,89;76,40;757;0;757;8,89;757");
   });
 
   it("décimale point en option", () => {
     const csv = summaryToCsv(summarize(acceptanceProject()), { comma: false });
-    expect(csv).toContain("Total;;;;8.89;76.40;757;0;757;8.89;757");
+    expect(csv).toContain("Total;;;;;;;8.89;76.40;757;0;757;8.89;757");
   });
 });
 
@@ -115,7 +117,7 @@ describe("détail et audit", () => {
     const rows = detailRows(acceptanceProject());
     expect(rows).toHaveLength(6);
     expect(rows[1]).toMatchObject({
-      element: "Ouvertures (portes, fenêtres)",
+      element: "Ouvertures",
       target: "Voiles extérieurs",
       h: 2.1,
     });
@@ -156,9 +158,11 @@ describe("Excel", () => {
     const recap = wb.getWorksheet("Récapitulatif")!;
     const totalRow = recap.getRow(s.rows.length + 2);
     expect(totalRow.getCell(1).value).toBe("Total");
-    expect(totalRow.getCell(5).value).toBeCloseTo(s.totals.concrete, 9);
-    expect(totalRow.getCell(6).value).toBeCloseTo(s.totals.formwork, 9);
-    expect(totalRow.getCell(9).value).toBeCloseTo(s.totals.steel, 9);
+    expect(recap.getRow(2).getCell(5).value).toBeCloseTo(0.2, 9);
+    expect(recap.getRow(2).getCell(7).value).toBeCloseTo(2.7, 9);
+    expect(totalRow.getCell(8).value).toBeCloseTo(s.totals.concrete, 9);
+    expect(totalRow.getCell(9).value).toBeCloseTo(s.totals.formwork, 9);
+    expect(totalRow.getCell(12).value).toBeCloseTo(s.totals.steel, 9);
     expect(recap.getRow(s.rows.length + 4).getCell(1).value).toBe(DISCLAIMER);
     expect(recap.getRow(s.rows.length + 5).getCell(1).value).toMatch(/non relue/);
     expect(wb.getWorksheet("Détail des tracés")!.rowCount).toBe(7);

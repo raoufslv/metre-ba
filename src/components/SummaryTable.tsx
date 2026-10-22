@@ -8,6 +8,10 @@ function Num({ v, d }: { v: number; d: number }) {
   return <td className={v < 0 ? "num neg" : "num"}>{formatNumber(v, d)}</td>;
 }
 
+function Dim({ v }: { v: number | null }) {
+  return <td className="num">{v === null ? "—" : formatNumber(v, 2)}</td>;
+}
+
 export default function SummaryTable() {
   const project = useApp((s) => s.project);
   const summary = useMemo(() => summarize(project), [project]);
@@ -111,6 +115,15 @@ export default function SummaryTable() {
                     Quantité
                   </th>
                   <th scope="col" className="num">
+                    Épaisseur m
+                  </th>
+                  <th scope="col" className="num">
+                    Côté b m
+                  </th>
+                  <th scope="col" className="num">
+                    Hauteur m
+                  </th>
+                  <th scope="col" className="num">
                     Béton m³
                   </th>
                   <th scope="col" className="num">
@@ -156,6 +169,9 @@ export default function SummaryTable() {
                     </th>
                     <td>{r.level}</td>
                     <td className="num">{formatQty(r.quantity, r.unit)}</td>
+                    <Dim v={r.a} />
+                    <Dim v={r.b} />
+                    <Dim v={r.h} />
                     <Num v={r.concrete} d={2} />
                     <Num v={r.formwork} d={2} />
                     <Num v={r.ha} d={0} />
@@ -173,6 +189,9 @@ export default function SummaryTable() {
               <tfoot>
                 <tr>
                   <th scope="row">Total net</th>
+                  <td />
+                  <td />
+                  <td />
                   <td />
                   <td />
                   <Num v={t.concrete} d={2} />

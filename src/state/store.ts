@@ -68,7 +68,7 @@ export interface AppState {
 
 export const MIN_POINTS: Record<Mode, number> = {
   ligne: 2,
-  ouv: 2,
+  ouv: 1,
   surface: 3,
   tremie: 3,
   point: 1,
@@ -224,6 +224,10 @@ export function addDraftPoint(p: Pt): void {
     );
     return;
   }
+  if (el.mode === "ouv") {
+    placeOpening(p);
+    return;
+  }
   if (el.mode === "point") {
     finishMeasurement([p]);
     return;
@@ -251,6 +255,36 @@ export function finishDraft(): boolean {
   return true;
 }
 
+/**
+ * Pose une ouverture ponctuelle, de la largeur et de la hauteur de l'élément.
+ * Chaque clic en ajoute une, sans redemander porte ou fenêtre.
+ */
+export function placeOpening(p: Pt): void {
+  const s = get();
+  if (pageScale(s) === null) {
+    notify("error", "Page non étalonnée : étalonnez l'échelle avant de poser une ouverture.");
+    return;
+  }
+  let el = activeElement(s);
+  if (!el || el.mode !== "ouv") {
+    el = s.project.elements.find((e) => e.mode === "ouv");
+    if (el) set({ activeElementId: el.id });
+  }
+  el = activeElement(get());
+  if (!el || el.mode !== "ouv") {
+    notify("error", "Aucun élément ouverture dans le catalogue.");
+    return;
+  }
+  if (!(el.a > 0) || !(el.h > 0)) {
+    notify(
+      "error",
+      "Indiquez la largeur et la hauteur de l'ouverture sur l'élément, puis cliquez pour la poser.",
+    );
+    return;
+  }
+  finishMeasurement([p]);
+}
+
 function finishMeasurement(pts: Pt[]): void {
   const s = get();
   const el = activeElement(s);
@@ -262,7 +296,6 @@ function finishMeasurement(pts: Pt[]): void {
     level: s.project.level,
     page: s.page,
     pts,
-    ...(el.mode === "ouv" ? { h: el.h } : {}),
     ...(el.targetId && (el.mode === "ouv" || el.mode === "tremie")
       ? { targetId: el.targetId }
       : {}),

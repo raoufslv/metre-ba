@@ -59,14 +59,18 @@ Netlify, un partage interne). Aucun serveur applicatif n'est nécessaire. Servez
    (< 1 %), orange (< 5 %) ou rouge, avec « Recalibrer ».
 4. Choisir un élément dans la barre latérale (ses paramètres se déplient ; un second clic
    les réduit, la liste ne montre plus que les lignes compactes) puis **tracer** :
-   - linéaire et ouverture : clics successifs, double-clic ou Entrée pour terminer ;
+   - linéaire : clics successifs, double-clic ou Entrée pour terminer. L'épaisseur se voit sur
+     le plan ; le rond blanc d'une ligne sélectionnée, ou le champ du tracé, la modifie ;
    - surface et trémie : au moins 3 sommets, double-clic pour fermer ;
-   - unité (poteau, semelle isolée…) : un clic = une unité.
+   - unité (poteau, semelle isolée…) : un clic = une unité ;
+   - ouverture : un clic pose un point de la taille définie sur l'élément (largeur × hauteur).
+     On peut en poser autant qu'on veut sans ressaisir porte ou fenêtre. Dupliquer l'élément
+     pour une autre taille.
 
    Maj verrouille l'angle à 45°/90°, Échap annule, Ctrl+Z / Ctrl+Maj+Z annule et rétablit.
 
-5. Onglet **Tracés** : survol, sélection, déplacement des sommets, changement d'élément ou
-   de niveau, suppression.
+5. Onglet **Tracés** : survol, sélection, déplacement des sommets, épaisseur de la ligne,
+   changement d'élément ou de niveau, suppression.
 6. **Exporter** : CSV, JSON (réimportable), Excel (Récapitulatif, Détail des tracés,
    Éléments et ratios, Audit) et PDF annoté (plan + tracés + légende + totaux).
 

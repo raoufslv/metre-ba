@@ -9,8 +9,9 @@ import {
 } from "pdf-lib";
 import { hexToRgb } from "../color";
 import { formatNumber, formatQty } from "../format";
+import { halfWidthPage, ribbonQuads } from "../geometry";
 import { apply, invert, viewportTransform } from "../pdfCoords";
-import { countsInTotals, summarize, type Summary } from "../quantities";
+import { countsInTotals, resolveDims, summarize, type Summary } from "../quantities";
 import type { Element, Measurement, Project, Pt } from "../types";
 import { DISCLAIMER } from "./report";
 
@@ -85,9 +86,36 @@ function drawText(ctx: Ctx, text: string, at: Pt, size: number, bold = false): v
   });
 }
 
-function drawMeasurement(ctx: Ctx, m: Measurement, el: Element): void {
+function drawMeasurement(
+  ctx: Ctx,
+  m: Measurement,
+  el: Element,
+  levelHeights: Project["levelHeights"],
+): void {
   const c = color(el.color);
   const deduction = el.mode === "ouv" || el.mode === "tremie";
+  if (el.mode === "ouv" && m.pts.length < 2) {
+    const p = m.pts[0];
+    if (!p) return;
+    const r = 6;
+    const square: Pt[] = [
+      [p[0] - r, p[1] - r],
+      [p[0] + r, p[1] - r],
+      [p[0] + r, p[1] + r],
+      [p[0] - r, p[1] + r],
+    ];
+    drawPolygon(ctx, square, { stroke: c, fill: c, fillOpacity: 0.7, width: 1 });
+    return;
+  }
+  if (el.mode === "ligne") {
+    const dims = resolveDims(el, m, { levelHeights });
+    const half = halfWidthPage(dims.a, m.meta.scale);
+    for (const quad of ribbonQuads(m.pts, half)) {
+      drawPolygon(ctx, quad, { stroke: c, fill: c, fillOpacity: 0.35, width: 0.4 });
+    }
+    drawPolygon(ctx, m.pts, { stroke: c, width: 1.2 });
+    return;
+  }
   if (el.mode === "point") {
     const p = m.pts[0]!;
     const r = 6;
@@ -149,21 +177,24 @@ function annotatePage(ctx: Ctx, project: Project, ms: Measurement[]): void {
   for (const m of ms) {
     const el = project.elements.find((e) => e.id === m.elementId);
     if (!el || m.pts.length === 0) continue;
-    drawMeasurement(ctx, m, el);
+    drawMeasurement(ctx, m, el, project.levelHeights);
     if (!used.includes(el)) used.push(el);
   }
   if (used.length > 0) drawLegend(ctx, used);
 }
 
 const COLS: { title: string; width: number; align: "left" | "right" }[] = [
-  { title: "Élément", width: 190, align: "left" },
-  { title: "Niveau", width: 70, align: "left" },
-  { title: "Quantité", width: 75, align: "right" },
-  { title: "Béton m³", width: 65, align: "right" },
-  { title: "Coffrage m²", width: 75, align: "right" },
-  { title: "Acier HA kg", width: 70, align: "right" },
-  { title: "TS kg", width: 60, align: "right" },
-  { title: "Acier total kg", width: 80, align: "right" },
+  { title: "Élément", width: 130, align: "left" },
+  { title: "Niveau", width: 58, align: "left" },
+  { title: "Quantité", width: 58, align: "right" },
+  { title: "Ép. m", width: 42, align: "right" },
+  { title: "b m", width: 36, align: "right" },
+  { title: "H m", width: 42, align: "right" },
+  { title: "Béton m³", width: 58, align: "right" },
+  { title: "Coffrage m²", width: 68, align: "right" },
+  { title: "HA kg", width: 48, align: "right" },
+  { title: "TS kg", width: 44, align: "right" },
+  { title: "Acier kg", width: 56, align: "right" },
 ];
 
 function summaryPages(
@@ -187,6 +218,9 @@ function summaryPages(
       r.name,
       r.level,
       formatQty(r.quantity, r.unit),
+      r.a === null ? "" : formatNumber(r.a, 2),
+      r.b === null ? "" : formatNumber(r.b, 2),
+      r.h === null ? "" : formatNumber(r.h, 2),
       formatNumber(r.concrete, 2),
       formatNumber(r.formwork, 2),
       formatNumber(r.ha, 0),
@@ -199,6 +233,9 @@ function summaryPages(
     bold: true,
     cells: [
       "Total",
+      "",
+      "",
+      "",
       "",
       "",
       formatNumber(t.concrete, 2),
