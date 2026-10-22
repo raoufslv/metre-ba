@@ -57,7 +57,8 @@ Netlify, un partage interne). Aucun serveur applicatif n'est nécessaire. Servez
    non étalonnée.
 3. **Vérifier une cote** (K) : mesurer une autre cote et saisir sa valeur ; verdict vert
    (< 1 %), orange (< 5 %) ou rouge, avec « Recalibrer ».
-4. Choisir un élément dans la barre latérale (ses paramètres se déplient) puis **tracer** :
+4. Choisir un élément dans la barre latérale (ses paramètres se déplient ; un second clic
+   les réduit, la liste ne montre plus que les lignes compactes) puis **tracer** :
    - linéaire et ouverture : clics successifs, double-clic ou Entrée pour terminer ;
    - surface et trémie : au moins 3 sommets, double-clic pour fermer ;
    - unité (poteau, semelle isolée…) : un clic = une unité.

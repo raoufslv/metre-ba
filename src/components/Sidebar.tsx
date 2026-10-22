@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { COFFRAGE_LABELS, dimFields, hasOwnRatios, MODE_LABELS } from "../lib/catalog";
 import { formatNumber, formatQty } from "../lib/format";
 import {
@@ -264,6 +264,16 @@ function ElementsTab() {
   const measurements = useApp((s) => s.project.measurements);
   const activeId = useApp((s) => s.activeElementId);
   const hidden = useApp((s) => s.project.settings.hiddenElementIds);
+  const [expandedId, setExpandedId] = useState<string | null>(activeId);
+  const prevActive = useRef(activeId);
+  // Duplication, suppression ou changement de catalogue : suivre l'élément actif
+  // seulement s'il était déjà déplié. Un clic sur la ligne réduite ne le rouvre pas.
+  useEffect(() => {
+    if (prevActive.current === activeId) return;
+    const previous = prevActive.current;
+    prevActive.current = activeId;
+    setExpandedId((cur) => (cur === previous ? activeId || null : cur));
+  }, [activeId]);
   const counts = useMemo(() => {
     const c = new Map<string, number>();
     for (const m of measurements) c.set(m.elementId, (c.get(m.elementId) ?? 0) + 1);
@@ -274,6 +284,7 @@ function ElementsTab() {
     <ul className="element-list" aria-label="Éléments de structure">
       {elements.map((el) => {
         const active = el.id === activeId;
+        const expanded = el.id === expandedId;
         return (
           <li key={el.id} className={active ? "active" : undefined}>
             <button
@@ -294,16 +305,27 @@ function ElementsTab() {
               type="button"
               className="element-btn"
               aria-pressed={active}
-              aria-expanded={active}
-              onClick={() => selectElement(el.id)}
+              aria-expanded={expanded}
+              title={expanded ? "Réduire" : "Afficher les paramètres"}
+              onClick={() => {
+                if (expanded) {
+                  setExpandedId(null);
+                  return;
+                }
+                if (!active) selectElement(el.id);
+                setExpandedId(el.id);
+              }}
             >
+              <span className="chevron" aria-hidden="true">
+                {expanded ? "▾" : "▸"}
+              </span>
               <span className="swatch" style={{ background: el.color }} aria-hidden="true" />
               <span className="element-name">{el.name}</span>
               <span className="badge" title={MODE_LABELS[el.mode]}>
                 {counts.get(el.id) ?? 0}
               </span>
             </button>
-            {active && <ElementEditor el={el} elements={elements} />}
+            {expanded && <ElementEditor el={el} elements={elements} />}
           </li>
         );
       })}
