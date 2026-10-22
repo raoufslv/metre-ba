@@ -97,11 +97,18 @@ export function drawShape(
     if (style.selected) {
       const grip = lineThicknessGrip(pts, style.thickness ?? el.a, style.scale, px);
       if (grip) {
+        const half = halfWidthPage(style.thickness ?? el.a, style.scale ?? 0);
         ctx.setLineDash([]);
+        ctx.strokeStyle = "#111111";
         ctx.fillStyle = "#ffffff";
+        ctx.lineWidth = 1.5 * px;
+        ctx.beginPath();
+        ctx.moveTo(grip.mid[0] + grip.nx * half, grip.mid[1] + grip.ny * half);
+        ctx.lineTo(grip.at[0], grip.at[1]);
+        ctx.stroke();
         ctx.lineWidth = 2 * px;
         ctx.beginPath();
-        ctx.arc(grip.at[0], grip.at[1], 5 * px, 0, Math.PI * 2);
+        ctx.arc(grip.at[0], grip.at[1], 7 * px, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
       }
@@ -141,7 +148,7 @@ export function drawHandles(
   ctx.restore();
 }
 
-/** Poignée d'épaisseur, assez éloignée de l'axe pour rester saisissable. */
+/** Poignée d'épaisseur, posée à l'extérieur du ruban pour rester saisissable. */
 export function lineThicknessGrip(
   pts: readonly Pt[],
   thicknessM: number,
@@ -149,7 +156,7 @@ export function lineThicknessGrip(
   px: number,
 ): ThicknessGrip | null {
   const half = halfWidthPage(thicknessM, scale ?? 0);
-  return thicknessGrip(pts, half > 0 ? half : 12 * px);
+  return thicknessGrip(pts, half + 16 * px);
 }
 
 /** Aperçu du tracé en cours : segments posés + pointillés jusqu'à la souris. */

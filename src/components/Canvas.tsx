@@ -56,7 +56,15 @@ function visibleOnPage(s: ReturnType<typeof useApp.getState>): Measurement[] {
 type Drag =
   | { kind: "pan"; lastX: number; lastY: number }
   | { kind: "vertex"; id: string; index: number; started: boolean }
-  | { kind: "thickness"; id: string; mid: Pt; nx: number; ny: number; started: boolean }
+  | {
+      kind: "thickness";
+      id: string;
+      mid: Pt;
+      nx: number;
+      ny: number;
+      startSigned: number;
+      startMeters: number;
+    }
   | { kind: "press"; sx: number; sy: number };
 
 export default function PlanCanvas() {
@@ -375,14 +383,16 @@ export default function PlanCanvas() {
       if (m && el?.mode === "ligne") {
         const dims = resolveDims(el, m, { levelHeights: s.project.levelHeights });
         const grip = gripFor(m.pts, dims.a, m.meta.scale, 1 / s.view.zoom);
-        if (grip && distance(pagePt, grip.at) <= 10 / s.view.zoom) {
+        if (grip && distance(pagePt, grip.at) <= 14 / s.view.zoom) {
           drag.current = {
             kind: "thickness",
             id: m.id,
             mid: grip.mid,
             nx: grip.nx,
             ny: grip.ny,
-            started: false,
+            startSigned:
+              (grip.at[0] - grip.mid[0]) * grip.nx + (grip.at[1] - grip.mid[1]) * grip.ny,
+            startMeters: dims.a,
           };
           return;
         }
@@ -416,12 +426,14 @@ export default function PlanCanvas() {
       const m = s.project.measurements.find((x) => x.id === d.id);
       if (m && m.meta.scale > 0) {
         const signed = (p[0] - d.mid[0]) * d.nx + (p[1] - d.mid[1]) * d.ny;
-        const meters = Math.min(3, Math.max(0.01, Math.abs(signed) * 2 * m.meta.scale));
+        const meters = Math.min(
+          3,
+          Math.max(0.02, d.startMeters + (signed - d.startSigned) * 2 * m.meta.scale),
+        );
         const thickness = Math.round(meters * 1000) / 1000;
         const next = { ...m.overrides, a: thickness };
         updateMeasurement(m.id, { overrides: next }, `m:${m.id}:thick`);
       }
-      d.started = true;
       suppressClick.current = true;
       return;
     }
