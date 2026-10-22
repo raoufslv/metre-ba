@@ -158,3 +158,58 @@ export function labelAnchor(pts: readonly Pt[]): Pt | null {
   const b = bounds(pts);
   return b ? [(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2] : null;
 }
+
+/** Demi-épaisseur réelle (m) en unités de page. 0 si l'échelle ou l'épaisseur manque. */
+export function halfWidthPage(meters: number, scale: number): number {
+  if (!(meters > 0) || !(scale > 0)) return 0;
+  return meters / 2 / scale;
+}
+
+/** Quadrilatères qui habillent une polyligne d'une épaisseur constante. */
+export function ribbonQuads(pts: readonly Pt[], half: number): Pt[][] {
+  if (!(half > 0) || pts.length < 2) return [];
+  const quads: Pt[][] = [];
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]!;
+    const b = pts[i]!;
+    const len = distance(a, b);
+    if (!(len > 0)) continue;
+    const nx = (-(b[1] - a[1]) / len) * half;
+    const ny = ((b[0] - a[0]) / len) * half;
+    quads.push([
+      [a[0] + nx, a[1] + ny],
+      [b[0] + nx, b[1] + ny],
+      [b[0] - nx, b[1] - ny],
+      [a[0] - nx, a[1] - ny],
+    ]);
+  }
+  return quads;
+}
+
+/** Poignée pour régler l'épaisseur : sur le bord du plus long segment. */
+export interface ThicknessGrip {
+  mid: Pt;
+  nx: number;
+  ny: number;
+  at: Pt;
+}
+
+export function thicknessGrip(pts: readonly Pt[], offset: number): ThicknessGrip | null {
+  if (pts.length < 2 || !(offset > 0)) return null;
+  let bestI = 1;
+  let bestLen = -1;
+  for (let i = 1; i < pts.length; i++) {
+    const len = distance(pts[i - 1]!, pts[i]!);
+    if (len > bestLen) {
+      bestLen = len;
+      bestI = i;
+    }
+  }
+  if (!(bestLen > 0)) return null;
+  const a = pts[bestI - 1]!;
+  const b = pts[bestI]!;
+  const nx = -(b[1] - a[1]) / bestLen;
+  const ny = (b[0] - a[0]) / bestLen;
+  const mid: Pt = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  return { mid, nx, ny, at: [mid[0] + nx * offset, mid[1] + ny * offset] };
+}

@@ -35,6 +35,9 @@ export async function buildWorkbook(project: Project, now = new Date()): Promise
       "Niveau",
       "Quantité",
       "Unité",
+      "Épaisseur m",
+      "Côté b m",
+      "Hauteur m",
       "Béton m³",
       "Coffrage m²",
       "Acier HA kg",
@@ -43,7 +46,7 @@ export async function buildWorkbook(project: Project, now = new Date()): Promise
       "Béton à commander m³",
       "Acier à commander kg",
     ],
-    [34, 14, 12, 8, 12, 14, 14, 18, 16, 20, 20],
+    [34, 14, 12, 8, 14, 12, 12, 12, 14, 14, 18, 16, 20, 20],
   );
   for (const r of summary.rows) {
     recap.addRow([
@@ -51,6 +54,9 @@ export async function buildWorkbook(project: Project, now = new Date()): Promise
       r.level,
       r.quantity,
       r.unit,
+      r.a,
+      r.b,
+      r.h,
       r.concrete,
       r.formwork,
       r.ha,
@@ -66,6 +72,9 @@ export async function buildWorkbook(project: Project, now = new Date()): Promise
     "",
     null,
     "",
+    null,
+    null,
+    null,
     t.concrete,
     t.formwork,
     t.ha,
@@ -75,7 +84,19 @@ export async function buildWorkbook(project: Project, now = new Date()): Promise
     t.orderSteel,
   ]);
   total.font = { bold: true };
-  formats(recap, { 3: F2, 5: F2, 6: F2, 7: F0, 8: F0, 9: F0, 10: F2, 11: F0 });
+  formats(recap, {
+    3: F2,
+    5: F2,
+    6: F2,
+    7: F2,
+    8: F2,
+    9: F2,
+    10: F0,
+    11: F0,
+    12: F0,
+    13: F2,
+    14: F0,
+  });
   recap.addRow([]);
   recap.addRow([DISCLAIMER]).font = { italic: true };
   if (summary.pending > 0) {
@@ -92,17 +113,19 @@ export async function buildWorkbook(project: Project, now = new Date()): Promise
       "Page",
       "Quantité",
       "Unité",
+      "Épaisseur m",
+      "Côté b m",
+      "Hauteur m",
       "Béton m³",
       "Coffrage m²",
       "Acier HA kg",
       "Treillis soudé kg",
       "Acier total kg",
       "Cible",
-      "Hauteur tracé (m)",
       "Surcharges",
       "Compté",
     ],
-    [12, 30, 12, 6, 12, 7, 12, 13, 13, 16, 15, 26, 16, 24, 8],
+    [12, 30, 12, 6, 12, 7, 14, 12, 12, 12, 13, 13, 16, 15, 26, 24, 8],
   );
   const rows = detailRows(project);
   for (const d of rows) {
@@ -113,18 +136,30 @@ export async function buildWorkbook(project: Project, now = new Date()): Promise
       d.page,
       d.quantity,
       d.unit,
+      d.a,
+      d.b,
+      d.height,
       d.concrete,
       d.formwork,
       d.ha,
       d.ts,
       d.steel,
       d.target,
-      d.h,
       d.overrides,
       d.counted ? "oui" : "non",
     ]);
   }
-  formats(detail, { 5: F2, 7: F2, 8: F2, 9: F0, 10: F0, 11: F0 });
+  formats(detail, {
+    5: F2,
+    7: F2,
+    8: F2,
+    9: F2,
+    10: F2,
+    11: F2,
+    12: F0,
+    13: F0,
+    14: F0,
+  });
 
   const els = wb.addWorksheet("Éléments et ratios");
   header(

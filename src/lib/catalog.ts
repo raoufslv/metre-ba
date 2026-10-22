@@ -75,7 +75,7 @@ const ROWS: Row[] = [
   ["siphons", "Siphons", "point", 0, 0, 0, "f0", 0, 0],
   ["cunettes", "Cunettes", "ligne", 0.3, 0, 0.1, "f2", 30, 0],
   ["caniveaux", "Caniveaux", "ligne", 0.3, 0, 0.3, "f2", 40, 0],
-  ["ouvertures", "Ouvertures (portes, fenêtres)", "ouv", 0, 0, 2.1, "t1", 0, 0, "voiles-ext"],
+  ["ouvertures", "Ouvertures", "ouv", 0.9, 0, 2.1, "t1", 0, 0, "voiles-ext"],
   ["tremies", "Trémies", "tremie", 0, 0, 0, "rv", 0, 0, "planchers"],
 ];
 
@@ -122,7 +122,7 @@ export const MODE_LABELS: Record<Mode, string> = {
   ligne: "Linéaire",
   surface: "Surface",
   point: "Unité",
-  ouv: "Ouverture (déduction)",
+  ouv: "Ouverture (point)",
   tremie: "Trémie (déduction)",
 };
 
@@ -159,7 +159,10 @@ export function dimFields(mode: Mode): { field: DimField; label: string }[] {
         { field: "h", label: "Hauteur (m)" },
       ];
     case "ouv":
-      return [{ field: "h", label: "Hauteur de l'ouverture (m)" }];
+      return [
+        { field: "a", label: "Largeur (m)" },
+        { field: "h", label: "Hauteur (m)" },
+      ];
     case "tremie":
       return [];
   }

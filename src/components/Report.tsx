@@ -41,6 +41,9 @@ export default function ReportSheet() {
             <th>Élément</th>
             <th>Niveau</th>
             <th>Quantité</th>
+            <th>Épaisseur m</th>
+            <th>Côté b m</th>
+            <th>Hauteur m</th>
             <th>Béton m³</th>
             <th>Coffrage m²</th>
             <th>Acier kg</th>
@@ -52,6 +55,9 @@ export default function ReportSheet() {
               <td>{r.name}</td>
               <td>{r.level}</td>
               <td>{formatQty(r.quantity, r.unit)}</td>
+              <td>{r.a === null ? "" : formatNumber(r.a, 2)}</td>
+              <td>{r.b === null ? "" : formatNumber(r.b, 2)}</td>
+              <td>{r.h === null ? "" : formatNumber(r.h, 2)}</td>
               <td>{formatNumber(r.concrete, 2)}</td>
               <td>{formatNumber(r.formwork, 2)}</td>
               <td>{formatNumber(r.steel, 0)}</td>
@@ -61,6 +67,9 @@ export default function ReportSheet() {
         <tfoot>
           <tr>
             <th>Total net</th>
+            <td />
+            <td />
+            <td />
             <td />
             <td />
             <td>{formatNumber(t.concrete, 2)}</td>

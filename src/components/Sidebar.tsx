@@ -8,7 +8,6 @@ import {
   targetModeFor,
 } from "../lib/quantities";
 import type { Coffrage, Element, Measurement, Mode, Overrides } from "../lib/types";
-import { RebarEditor } from "./RebarForm";
 import {
   deleteMeasurement,
   duplicateActiveElement,
@@ -173,48 +172,22 @@ function ElementEditor({ el, elements }: { el: Element; elements: Element[] }) {
       {hasOwnRatios(el.mode) ? (
         <fieldset className="overrides">
           <legend>Acier</legend>
-          <label className="check">
-            <input
-              type="radio"
-              name={`${p}-steel`}
-              checked={(el.steelMode ?? "ratio") === "ratio"}
-              onChange={() => updateElement(el.id, { steelMode: "ratio" })}
-            />
-            Ratio (kg par m³ de béton)
-          </label>
-          <label className="check">
-            <input
-              type="radio"
-              name={`${p}-steel`}
-              checked={el.steelMode === "detail"}
-              onChange={() => updateElement(el.id, { steelMode: "detail" })}
-            />
-            Détaillé (barres HA et treillis saisis)
-          </label>
-          {el.steelMode === "detail" ? (
-            <RebarEditor
-              idPrefix={p}
-              mode={el.mode}
-              bars={el.bars ?? []}
-              mesh={el.mesh}
-              onBars={(bars) => updateElement(el.id, { bars })}
-              onMesh={(mesh) => updateElement(el.id, { mesh })}
-            />
-          ) : (
-            <>
-              <NumberField
-                id={`${p}-ha`}
-                label="Ratio acier HA (kg/m³)"
-                value={el.ratioHA}
-                onCommit={(v) => updateElement(el.id, { ratioHA: v })}
-              />
-              <NumberField
-                id={`${p}-ts`}
-                label="Ratio treillis soudé (kg/m³)"
-                value={el.ratioTS}
-                onCommit={(v) => updateElement(el.id, { ratioTS: v })}
-              />
-            </>
+          <NumberField
+            id={`${p}-ha`}
+            label="Ratio acier HA (kg/m³)"
+            value={el.ratioHA}
+            onCommit={(v) => updateElement(el.id, { ratioHA: v, steelMode: "ratio" })}
+          />
+          <NumberField
+            id={`${p}-ts`}
+            label="Ratio treillis soudé (kg/m³)"
+            value={el.ratioTS}
+            onCommit={(v) => updateElement(el.id, { ratioTS: v, steelMode: "ratio" })}
+          />
+          {el.steelMode === "detail" && (
+            <button type="button" onClick={() => updateElement(el.id, { steelMode: "ratio" })}>
+              Revenir aux ratios (le ferraillage détaillé n'est plus proposé)
+            </button>
           )}
         </fieldset>
       ) : (
@@ -234,25 +207,6 @@ function ElementEditor({ el, elements }: { el: Element; elements: Element[] }) {
           </select>
           <small className="muted">Épaisseur et ratios d'acier sont ceux de l'élément ciblé.</small>
         </div>
-      )}
-      {hasOwnRatios(el.mode) && (
-        <>
-          <NumberField
-            id={`${p}-lc`}
-            label="Perte / majoration béton (%)"
-            value={el.lossConcrete ?? 0}
-            onCommit={(v) => updateElement(el.id, { lossConcrete: v })}
-          />
-          <NumberField
-            id={`${p}-ls`}
-            label="Perte / majoration acier (%)"
-            value={el.lossSteel ?? 0}
-            onCommit={(v) => updateElement(el.id, { lossSteel: v })}
-          />
-          <small className="muted">
-            Appliquée à la quantité à commander uniquement ; la quantité mesurée reste inchangée.
-          </small>
-        </>
       )}
       <small className="muted">Valeurs indicatives, à valider par un ingénieur.</small>
     </div>
@@ -424,13 +378,55 @@ function MeasurementEditor({ m }: { m: Measurement }) {
           ))}
         </select>
       </div>
-      {el?.mode === "ouv" && (
+      {el?.mode === "ligne" && (
         <NumberField
-          id={`${p}-h`}
-          label="Hauteur de l'ouverture (m)"
-          value={m.h ?? el.h}
-          onCommit={(v) => updateMeasurement(m.id, { h: v }, `m:${m.id}:h`)}
+          id={`${p}-thick`}
+          label="Épaisseur de cette ligne (m)"
+          value={m.overrides?.a ?? el.a}
+          onCommit={(v) => {
+            const next: Overrides = { ...m.overrides };
+            if (v === el.a) delete next.a;
+            else next.a = v;
+            updateMeasurement(
+              m.id,
+              { overrides: Object.keys(next).length ? next : undefined },
+              `m:${m.id}:thick`,
+            );
+          }}
         />
+      )}
+      {el?.mode === "ouv" && (
+        <>
+          <NumberField
+            id={`${p}-w`}
+            label="Largeur de cette ouverture (m)"
+            value={m.overrides?.a ?? el.a}
+            onCommit={(v) => {
+              const next: Overrides = { ...m.overrides };
+              if (v === el.a) delete next.a;
+              else next.a = v;
+              updateMeasurement(
+                m.id,
+                { overrides: Object.keys(next).length ? next : undefined },
+                `m:${m.id}:ov:a`,
+              );
+            }}
+          />
+          <NumberField
+            id={`${p}-h`}
+            label="Hauteur de cette ouverture (m)"
+            value={m.overrides?.h ?? m.h ?? el.h}
+            onCommit={(v) => {
+              const next: Overrides = { ...m.overrides };
+              delete next.h;
+              updateMeasurement(
+                m.id,
+                { h: v, overrides: Object.keys(next).length ? next : undefined },
+                `m:${m.id}:h`,
+              );
+            }}
+          />
+        </>
       )}
       {targetMode && (
         <div className="field">
@@ -454,64 +450,21 @@ function MeasurementEditor({ m }: { m: Measurement }) {
       {el && !el.mode.startsWith("ouv") && el.mode !== "tremie" && (
         <fieldset className="overrides">
           <legend>Surcharges pour ce tracé</legend>
-          {dimFields(el.mode).map(({ field, label }) => (
-            <OverrideField
-              key={field}
-              m={m}
-              field={field}
-              label={label}
-              base={resolveDims(el, { ...m, overrides: undefined }, { levelHeights })[field]}
-            />
-          ))}
+          {dimFields(el.mode)
+            .filter(({ field }) => !(el.mode === "ligne" && field === "a"))
+            .map(({ field, label }) => (
+              <OverrideField
+                key={field}
+                m={m}
+                field={field}
+                label={label}
+                base={resolveDims(el, { ...m, overrides: undefined }, { levelHeights })[field]}
+              />
+            ))}
           {hasOwnRatios(el.mode) && (el.steelMode ?? "ratio") === "ratio" && (
             <>
               <OverrideField m={m} field="ratioHA" label="Ratio HA (kg/m³)" base={el.ratioHA} />
               <OverrideField m={m} field="ratioTS" label="Ratio TS (kg/m³)" base={el.ratioTS} />
-            </>
-          )}
-        </fieldset>
-      )}
-      {el && el.steelMode === "detail" && hasOwnRatios(el.mode) && (
-        <fieldset className="overrides">
-          <legend>Ferraillage de ce tracé</legend>
-          {m.rebar ? (
-            <>
-              <RebarEditor
-                idPrefix={p}
-                mode={el.mode}
-                bars={m.rebar.bars}
-                mesh={m.rebar.mesh}
-                onBars={(bars) =>
-                  updateMeasurement(m.id, { rebar: { ...m.rebar, bars } }, `m:${m.id}:rebar`)
-                }
-                onMesh={(mesh) =>
-                  updateMeasurement(
-                    m.id,
-                    { rebar: { bars: m.rebar?.bars ?? [], mesh } },
-                    `m:${m.id}:rebar`,
-                  )
-                }
-              />
-              <button type="button" onClick={() => updateMeasurement(m.id, { rebar: undefined })}>
-                Revenir au ferraillage de l'élément
-              </button>
-            </>
-          ) : (
-            <>
-              <p className="muted small">Ce tracé utilise le ferraillage de l'élément.</p>
-              <button
-                type="button"
-                onClick={() =>
-                  updateMeasurement(m.id, {
-                    rebar: {
-                      bars: structuredClone(el.bars ?? []),
-                      ...(el.mesh ? { mesh: structuredClone(el.mesh) } : {}),
-                    },
-                  })
-                }
-              >
-                Ferraillage spécifique à ce tracé
-              </button>
             </>
           )}
         </fieldset>
@@ -527,7 +480,10 @@ function MeasurementEditor({ m }: { m: Measurement }) {
         {m.meta.method === "manual" ? "manuel" : "assisté"} ·{" "}
         {m.meta.author === "human" ? "humain" : "IA"} · {m.meta.reviewed ? "relu" : "à relire"}
       </p>
-      <p className="muted small">Glissez un sommet sur le plan pour le déplacer.</p>
+      <p className="muted small">
+        Glissez un sommet pour le déplacer
+        {el?.mode === "ligne" ? ", ou le rond blanc pour changer l'épaisseur." : "."}
+      </p>
     </div>
   );
 }

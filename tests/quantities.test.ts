@@ -87,6 +87,23 @@ describe("exemples chiffrés du cahier des charges", () => {
     near(q.ha, -33.6);
   });
 
+  it("ouverture posée en un point : largeur et hauteur de l'élément", () => {
+    const typed = { ...ouverture, a: 0.9, h: 2.1 };
+    const q = computeMeasurement(meas(typed.id, [[40, 40]], K, { targetId: voileExt.id }), [
+      voileExt,
+      typed,
+    ]);
+    expect(q.unit).toBe("u");
+    expect(q.quantity).toBe(1);
+    near(q.concrete, -0.9 * 2.1 * 0.2);
+    const missing = computeMeasurement(
+      meas(ouverture.id, [[40, 40]], K, { targetId: voileExt.id }),
+      elements,
+    );
+    expect(missing.warnings.join(" ")).toMatch(/Largeur/);
+    expect(missing.concrete).toBeCloseTo(0);
+  });
+
   it("5. trémie 1 × 1 m dans le plancher", () => {
     const q = computeMeasurement(
       meas(tremie.id, rect(100, 100), K, { targetId: plancher.id }),

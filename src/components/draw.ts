@@ -1,8 +1,18 @@
 import { withAlpha } from "../lib/color";
-import { distanceToPolyline, pointInPolygon, polygonArea, polylineLength } from "../lib/geometry";
+import {
+  distance,
+  distanceToPolyline,
+  halfWidthPage,
+  labelAnchor,
+  pointInPolygon,
+  polygonArea,
+  polylineLength,
+  ribbonQuads,
+  thicknessGrip,
+  type ThicknessGrip,
+} from "../lib/geometry";
 import { formatQty } from "../lib/format";
 import type { Annotation, Element, Measurement, Pt } from "../lib/types";
-import { labelAnchor } from "../lib/geometry";
 
 export const PROBE_COLOR = "#c2006b";
 
@@ -13,6 +23,8 @@ export interface ShapeStyle {
   selected?: boolean;
   /** Échelle de la page (m par unité), pour dessiner les poteaux à leur taille réelle. */
   scale: number | null;
+  /** Épaisseur réelle (m) d'une ligne, pour dessiner le ruban. */
+  thickness?: number;
 }
 
 function path(ctx: CanvasRenderingContext2D, pts: readonly Pt[], close: boolean): void {
@@ -49,16 +61,50 @@ export function drawShape(
     ctx.shadowBlur = 8;
   }
 
-  if (el.mode === "point") {
+  if (el.mode === "point" || (el.mode === "ouv" && pts.length < 2)) {
     const p = pts[0];
     if (p) {
-      const [hx, hy] = pointHalfSize(el, style);
-      ctx.fillStyle = withAlpha(el.color, 0.45);
-      ctx.lineWidth = 2 * px * emphasis;
-      ctx.beginPath();
-      ctx.rect(p[0] - hx, p[1] - hy, hx * 2, hy * 2);
+      if (el.mode === "ouv") {
+        const r = 7 * px * emphasis;
+        ctx.fillStyle = withAlpha(el.color, 0.85);
+        ctx.lineWidth = 2 * px;
+        ctx.beginPath();
+        ctx.arc(p[0], p[1], r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        const [hx, hy] = pointHalfSize(el, style);
+        ctx.fillStyle = withAlpha(el.color, 0.45);
+        ctx.lineWidth = 2 * px * emphasis;
+        ctx.beginPath();
+        ctx.rect(p[0] - hx, p[1] - hy, hx * 2, hy * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+  } else if (el.mode === "ligne") {
+    const half = halfWidthPage(style.thickness ?? el.a, style.scale ?? 0);
+    ctx.fillStyle = withAlpha(el.color, style.selected ? 0.42 : 0.3);
+    ctx.lineWidth = 1 * px;
+    for (const quad of ribbonQuads(pts, half)) {
+      path(ctx, quad, true);
       ctx.fill();
       ctx.stroke();
+    }
+    path(ctx, pts, false);
+    ctx.lineWidth = 1.5 * px * emphasis;
+    ctx.stroke();
+    if (style.selected) {
+      const grip = lineThicknessGrip(pts, style.thickness ?? el.a, style.scale, px);
+      if (grip) {
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#ffffff";
+        ctx.lineWidth = 2 * px;
+        ctx.beginPath();
+        ctx.arc(grip.at[0], grip.at[1], 5 * px, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
     }
   } else if (el.mode === "surface" || el.mode === "tremie") {
     path(ctx, pts, true);
@@ -95,6 +141,17 @@ export function drawHandles(
   ctx.restore();
 }
 
+/** Poignée d'épaisseur, assez éloignée de l'axe pour rester saisissable. */
+export function lineThicknessGrip(
+  pts: readonly Pt[],
+  thicknessM: number,
+  scale: number | null,
+  px: number,
+): ThicknessGrip | null {
+  const half = halfWidthPage(thicknessM, scale ?? 0);
+  return thicknessGrip(pts, half > 0 ? half : 12 * px);
+}
+
 /** Aperçu du tracé en cours : segments posés + pointillés jusqu'à la souris. */
 export function drawDraft(
   ctx: CanvasRenderingContext2D,
@@ -102,12 +159,24 @@ export function drawDraft(
   draft: readonly Pt[],
   mouse: Pt | null,
   px: number,
+  scale: number | null = null,
 ): void {
   const closed = el.mode === "surface" || el.mode === "tremie";
+  const preview = mouse && draft.length > 0 ? [...draft, mouse] : draft;
   ctx.save();
   ctx.strokeStyle = el.color;
   ctx.lineWidth = 2.5 * px;
   ctx.lineCap = "round";
+  if (el.mode === "ligne") {
+    const half = halfWidthPage(el.a, scale ?? 0);
+    ctx.fillStyle = withAlpha(el.color, 0.22);
+    ctx.lineWidth = 1 * px;
+    for (const quad of ribbonQuads(preview, half)) {
+      path(ctx, quad, true);
+      ctx.fill();
+    }
+    ctx.lineWidth = 1.5 * px;
+  }
   if (closed && draft.length >= 2) {
     path(ctx, mouse ? [...draft, mouse] : draft, true);
     ctx.fillStyle = withAlpha(el.color, 0.18);
@@ -184,7 +253,7 @@ export function liveLabel(el: Element, pts: readonly Pt[], scale: number | null)
   if (el.mode === "surface" || el.mode === "tremie") {
     return pts.length >= 3 ? formatQty(polygonArea(pts) * scale * scale, "m²") : null;
   }
-  if (el.mode === "ligne" || el.mode === "ouv") {
+  if (el.mode === "ligne" || (el.mode === "ouv" && pts.length >= 2)) {
     return pts.length >= 2 ? formatQty(polylineLength(pts) * scale, "m") : null;
   }
   return null;
@@ -202,13 +271,20 @@ export function hitTest(
     const m = measurements[i]!;
     const el = elements.find((e) => e.id === m.elementId);
     if (!el) continue;
-    if (el.mode === "point") {
+    if (el.mode === "point" || (el.mode === "ouv" && m.pts.length < 2)) {
       const q = m.pts[0];
       if (!q) continue;
-      const [hx, hy] = pointHalfSize(el, style);
-      if (Math.abs(p[0] - q[0]) <= hx + tol && Math.abs(p[1] - q[1]) <= hy + tol) return m;
+      if (el.mode === "ouv") {
+        if (distance(p, q) <= 8 * style.px + tol) return m;
+      } else {
+        const [hx, hy] = pointHalfSize(el, style);
+        if (Math.abs(p[0] - q[0]) <= hx + tol && Math.abs(p[1] - q[1]) <= hy + tol) return m;
+      }
     } else if (el.mode === "surface" || el.mode === "tremie") {
       if (pointInPolygon(p, m.pts) || distanceToPolyline(p, m.pts, true) <= tol) return m;
+    } else if (el.mode === "ligne") {
+      const half = halfWidthPage(m.overrides?.a ?? el.a, m.meta.scale);
+      if (distanceToPolyline(p, m.pts) <= Math.max(tol, half)) return m;
     } else if (distanceToPolyline(p, m.pts) <= tol) {
       return m;
     }

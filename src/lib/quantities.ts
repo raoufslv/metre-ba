@@ -172,9 +172,13 @@ function computeDeduction(
   const target = elements.find((e) => e.id === targetId);
   const expected = targetModeFor(el.mode);
   if (!target || target.mode !== expected) {
-    const q = el.mode === "ouv" ? polylineLength(m.pts) * k : polygonArea(m.pts) * k * k;
+    const point = el.mode === "ouv" && m.pts.length < 2;
+    const q =
+      el.mode === "ouv" ? (point ? 1 : polylineLength(m.pts) * k) : polygonArea(m.pts) * k * k;
     return {
-      ...empty(unit, ["Élément cible absent ou incompatible : aucune déduction appliquée."]),
+      ...empty(point ? "u" : unit, [
+        "Élément cible absent ou incompatible : aucune déduction appliquée.",
+      ]),
       quantity: q,
     };
   }
@@ -182,7 +186,13 @@ function computeDeduction(
   const warnings: string[] = [];
 
   if (el.mode === "ouv") {
-    const W = polylineLength(m.pts) * k;
+    // Un seul point : la largeur est celle de l'élément (on pose la même taille partout).
+    // Un segment (ancien tracé) garde sa longueur comme largeur.
+    const point = m.pts.length < 2;
+    const W = point ? d.a : polylineLength(m.pts) * k;
+    if (point && !(W > 0)) {
+      warnings.push("Largeur d'ouverture nulle : indiquez-la sur l'élément.");
+    }
     const concrete = -W * d.h * e;
     let formwork = -W * d.h * wallFaces(target.cof);
     if (el.cof === "t1") {
@@ -195,7 +205,13 @@ function computeDeduction(
       warnings.push("Allège + hauteur de la fenêtre dépassent la hauteur du voile.");
     }
     return deductionSteel(
-      { quantity: W, unit, concrete, formwork, warnings },
+      {
+        quantity: point ? 1 : W,
+        unit: point ? "u" : unit,
+        concrete,
+        formwork,
+        warnings,
+      },
       target,
       target.ratioHA,
       target.ratioTS,
@@ -250,6 +266,10 @@ export interface SummaryRow {
   unit: Unit;
   /** Nombre de tracés comptés. */
   count: number;
+  /** Dimensions effectives (m) si tous les tracés du groupe les partagent, sinon null. */
+  a: number | null;
+  b: number | null;
+  h: number | null;
   quantity: number;
   concrete: number;
   /** Coffrage net, recouvrements de jonctions déduits si l'option est active. */
@@ -300,6 +320,12 @@ function materialElement(el: Element | undefined, m: Measurement, all: readonly 
   return el;
 }
 
+function uniformDim(values: number[]): number | null {
+  const first = values[0];
+  if (first === undefined) return null;
+  return values.every((v) => Math.abs(v - first) < 1e-9) ? first : null;
+}
+
 /** Récapitulatif groupé par élément puis par niveau, dans l'ordre du catalogue et des niveaux. */
 export function summarize(
   project: SummaryInput,
@@ -337,6 +363,7 @@ export function summarize(
   }
 
   const rows = new Map<string, SummaryRow>();
+  const dimBuckets = new Map<string, { a: number[]; b: number[]; h: number[] }>();
   const diameters = new Map<number, HaDiameter>();
   const meshes = new Map<string, MeshTakeoff>();
   const totals: Totals = {
@@ -370,8 +397,19 @@ export function summarize(
         orderConcrete: 0,
         orderSteel: 0,
         warnings: [],
+        a: null,
+        b: null,
+        h: null,
       };
       rows.set(key, row);
+      dimBuckets.set(key, { a: [], b: [], h: [] });
+    }
+    if (el) {
+      const dims = resolveDims(el, m, opts);
+      const bucket = dimBuckets.get(key)!;
+      bucket.a.push(dims.a);
+      bucket.b.push(dims.b);
+      bucket.h.push(dims.h);
     }
     const mat = materialElement(el, m, project.elements);
     const fc = 1 + (mat?.lossConcrete ?? 0) / 100;
@@ -424,6 +462,14 @@ export function summarize(
       acc.kg += q.meshInfo.kg;
       meshes.set(key, acc);
     }
+  }
+
+  for (const [key, row] of rows) {
+    const bucket = dimBuckets.get(key);
+    if (!bucket) continue;
+    row.a = uniformDim(bucket.a);
+    row.b = uniformDim(bucket.b);
+    row.h = uniformDim(bucket.h);
   }
 
   const elOrder = new Map(project.elements.map((e, i) => [e.id, i]));

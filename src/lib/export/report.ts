@@ -1,5 +1,5 @@
 import { MODE_LABELS } from "../catalog";
-import { computeMeasurement, countsInTotals } from "../quantities";
+import { computeMeasurement, countsInTotals, resolveDims } from "../quantities";
 import type { Project } from "../types";
 
 export const DISCLAIMER =
@@ -14,6 +14,12 @@ export interface DetailRow {
   points: number;
   quantity: number;
   unit: string;
+  /** Épaisseur ou côté a (m). */
+  a: number | null;
+  /** Second côté (m), poteaux. */
+  b: number | null;
+  /** Hauteur effective (m). */
+  height: number | null;
   concrete: number;
   formwork: number;
   ha: number;
@@ -38,6 +44,7 @@ export function detailRows(project: Project): DetailRow[] {
   return project.measurements.map((m) => {
     const el = project.elements.find((e) => e.id === m.elementId);
     const q = computeMeasurement(m, project.elements, { levelHeights: project.levelHeights });
+    const dims = el ? resolveDims(el, m, { levelHeights: project.levelHeights }) : null;
     const counted = countsInTotals(m);
     return {
       id: m.id,
@@ -48,6 +55,9 @@ export function detailRows(project: Project): DetailRow[] {
       points: m.pts.length,
       quantity: q.quantity,
       unit: q.unit,
+      a: dims?.a ?? null,
+      b: dims?.b ?? null,
+      height: dims?.h ?? null,
       concrete: q.concrete,
       formwork: q.formwork,
       ha: q.ha,

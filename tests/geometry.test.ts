@@ -13,7 +13,10 @@ import {
   polygonArea,
   polygonPerimeter,
   polylineLength,
+  ribbonQuads,
   snapToPoints,
+  thicknessGrip,
+  halfWidthPage,
 } from "../src/lib/geometry";
 import type { Pt } from "../src/lib/types";
 
@@ -151,6 +154,35 @@ describe("accrochage et sélection", () => {
   it("sommet le plus proche", () => {
     expect(nearestVertex(square, [9, 9], 2)).toBe(2);
     expect(nearestVertex(square, [5, 5], 2)).toBe(-1);
+  });
+
+  it("ruban d'épaisseur autour d'un segment", () => {
+    expect(halfWidthPage(0.2, 0.01)).toBeCloseTo(10);
+    expect(halfWidthPage(0, 0.01)).toBe(0);
+    const quads = ribbonQuads(
+      [
+        [0, 0],
+        [100, 0],
+      ],
+      5,
+    );
+    expect(quads).toHaveLength(1);
+    expect(quads[0]).toEqual([
+      [0, 5],
+      [100, 5],
+      [100, -5],
+      [0, -5],
+    ]);
+    const grip = thicknessGrip(
+      [
+        [0, 0],
+        [100, 0],
+      ],
+      5,
+    );
+    expect(grip?.mid).toEqual([50, 0]);
+    expect(grip?.at).toEqual([50, 5]);
+    expect(ribbonQuads([[0, 0]], 5)).toEqual([]);
   });
 
   it("boîte englobante et ancrage d'étiquette", () => {
